@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Route Travel Risk</title>
+  <style>
+    :root { font-family: Arial, sans-serif; color: #1c2925; background: #f4f7f5; } body { margin: 0; } main { max-width: 900px; margin: auto; padding: 28px 16px 48px; } h1 { font-size: 28px; } h2 { border-bottom: 1px solid #c8d3cd; font-size: 19px; padding-bottom: 7px; } form, .panel, article { background: white; border: 1px solid #d0d9d3; border-radius: 6px; padding: 16px; } label, strong { display: block; font-weight: 700; margin-bottom: 5px; } input { box-sizing: border-box; border: 1px solid #91a198; border-radius: 4px; font: inherit; margin-bottom: 12px; padding: 10px; width: 100%; } .date-time { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; } button { background: #176b4b; border: 0; border-radius: 4px; color: white; cursor: pointer; font: inherit; font-weight: 700; padding: 10px 16px; } button:disabled { opacity: .65; } .hidden { display: none; } .grid { display: grid; gap: 8px 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid div { border-bottom: 1px solid #eef1ef; padding: 4px 0; } .locations { display: grid; gap: 12px; } article h3 { margin: 0 0 10px; } #error { background: #fff0f0; border: 1px solid #d98c8c; color: #7d2424; margin-top: 14px; padding: 10px; } @media (max-width: 540px) { .date-time, .grid { grid-template-columns: 1fr; } }
+    /* Dashboard refresh */
+    :root { color: #17212b; background: #f3f7fa; font-family: Inter, Arial, sans-serif; }
+    body { background: #f3f7fa; }
+    main { isolation: isolate; max-width: 1060px; padding: 0 20px 48px; position: relative; }
+    main::before { background: linear-gradient(118deg, #0c463e, #146c5b 58%, #288b73); border-radius: 0 0 24px 24px; content: ""; height: 250px; left: 0; position: absolute; right: 0; top: 0; z-index: -1; }
+    h1 { color: white; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -.05em; margin: 0; padding: 46px 0 62px; }
+    h1::after { color: #d8f4ed; content: "See the conditions ahead before you begin your journey."; display: block; font-size: 1rem; font-weight: 400; letter-spacing: 0; margin-top: 15px; }
+    h2 { border: 0; color: #17212b; font-size: 1.15rem; margin: 0 0 15px; padding: 0; }
+    form, .panel, article { border: 1px solid #dce6ec; border-radius: 16px; box-shadow: 0 12px 32px rgba(27, 53, 68, .08); }
+    form { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 24px; }
+    form::before { color: #17212b; content: "Plan your journey"; font-size: 1.15rem; font-weight: 700; grid-column: 1 / -1; }
+    label { color: #354454; font-size: .84rem; }
+    input { background: #fbfdfe; border-color: #cbd8e1; border-radius: 9px; padding: 11px 12px; }
+    input:focus { border-color: #146c5b; box-shadow: 0 0 0 3px rgba(20,108,91,.14); outline: 0; }
+    .date-time { gap: 16px; }
+    button { background: #146c5b; border-radius: 9px; box-shadow: 0 5px 12px rgba(13,81,69,.2); margin-top: auto; min-height: 44px; padding: 0 20px; }
+    button:hover { background: #0d5145; }
+    #error { border-radius: 10px; box-shadow: none; }
+    #results { margin-top: 30px; }
+    #results > section { margin-top: 30px; }
+    #results > section:first-child { display: grid; gap: 16px; grid-template-columns: 1.1fr .9fr; }
+    #results > section:first-child h2 { grid-column: 1 / -1; margin-bottom: 0; }
+    .panel { padding: 22px; }
+    .panel .grid { gap: 0; grid-template-columns: repeat(2, 1fr); }
+    .panel .grid div { border-bottom: 1px solid #edf1f4; padding: 12px 8px 12px 0; }
+    .panel .grid strong { color: #617080; font-size: .73rem; letter-spacing: .06em; text-transform: uppercase; }
+    #overall { border-top: 4px solid #18794e; }
+    #overall .grid div:first-child strong { color: #18794e; }
+    .locations { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    article { overflow: hidden; padding: 0; }
+    article h3 { border-bottom: 1px solid #edf1f4; font-size: 1rem; margin: 0; padding: 17px; }
+    article .grid { padding: 8px 17px; }
+    article .grid div { padding: 11px 0; }
+    article .grid strong { color: #617080; font-size: .74rem; letter-spacing: .04em; text-transform: uppercase; }
+    @media (max-width: 640px) { main { padding: 0 14px 35px; } form, #results > section:first-child { grid-template-columns: 1fr; } .date-time { grid-template-columns: 1fr; } h1 { padding-top: 35px; } }
+  </style>
+</head>
+<body><main>
+  <h1>Route Travel Risk &amp; Weather Forecast</h1>
+  <form id="form">
+    <label for="start">Current Location</label><input id="start" placeholder="e.g. Anantapur, Andhra Pradesh, India" required>
+    <label for="destination">Destination</label><input id="destination" placeholder="e.g. Hyderabad, Telangana, India" required>
+    <div class="date-time"><div><label for="date">Departure Date</label><input id="date" type="date" required></div><div><label for="time">Departure Time</label><input id="time" type="time" required></div></div>
+    <button id="submit">Analyze Route</button>
+  </form>
+  <div id="error" class="hidden"></div>
+  <div id="results" class="hidden"><section><h2>Route</h2><div id="route" class="panel"></div></section><section><h2>Overall Risk</h2><div id="overall" class="panel"></div></section><section><h2>Forecast Along Route</h2><div id="locations" class="locations"></div></section></div>
+</main>
+<script>
+  const esc = value => String(value ?? 'Not available').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const row = (name, value) => `<div><strong>${esc(name)}</strong>${esc(value)}</div>`;
+  function render(data) {
+    document.querySelector('#results').classList.remove('hidden');
+    document.querySelector('#route').innerHTML = `<div class="grid">${row('Distance', `${data.route.distance_km} km`)}${row('Time to travel', `${data.route.travel_time_minutes} minutes`)}${row('Departure time', data.departure_time)}</div>`;
+    document.querySelector('#overall').innerHTML = `<div class="grid">${row('Level', data.overall_risk.level)}${row('Score', `${data.overall_risk.score}/100`)}${row('Highest-risk places', data.overall_risk.highest_risk_places.join(', '))}</div>`;
+    document.querySelector('#locations').innerHTML = data.locations.map(location => `<article><h3>${esc(location.place)}</h3><div class="grid">${row('Distance', `${location.distance_km} km`)}${row('Arrival time', location.arrival_time)}${row('Temperature', `${location.temperature_c} C`)}${row('Humidity', `${location.humidity_percent}%`)}${row('Rain probability', `${location.rain_probability_percent}%`)}${row('Wind speed', `${location.wind_speed_kmh} km/h`)}${row('Risk', `${location.risk.level} (${location.risk.score}/100)`)}${row('Risk factors', location.risk.factors.join(', '))}</div></article>`).join('');
+  }
+  document.querySelector('#form').addEventListener('submit', async event => {
+    event.preventDefault(); const button = document.querySelector('#submit'); const error = document.querySelector('#error'); error.classList.add('hidden'); button.disabled = true; button.textContent = 'Analyzing...';
+    try {
+      const body = { current_location: document.querySelector('#start').value, destination: document.querySelector('#destination').value, departure_date: document.querySelector('#date').value, departure_time: document.querySelector('#time').value };
+      const response = await fetch('/api/analyze', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`); render(data);
+    } catch (err) { error.textContent = `Request failed: ${err.message}`; error.classList.remove('hidden'); } finally { button.disabled = false; button.textContent = 'Analyze Route'; }
+  });
+</script></body></html>

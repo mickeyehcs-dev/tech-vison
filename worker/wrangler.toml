@@ -1,0 +1,18 @@
+name = "smart-food-delivery-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "development"
+DB_HOST = "127.0.0.1"
+DB_PORT = "3306"
+DB_NAME = "smart_food_delivery"
+DB_USER = "root"
+DB_PASSWORD = ""
+JWT_SECRET = "super_secure_jwt_secret_key_smart_food_delivery_2026_x89"
+CORS_ORIGIN = "http://localhost:5173"
+
+# Production environment configuration
+[env.production]
+vars = { ENVIRONMENT = "production" }
