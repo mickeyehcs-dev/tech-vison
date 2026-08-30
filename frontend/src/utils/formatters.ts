@@ -61,3 +61,22 @@ export function formatDuration(hours: number): string {
   return `${mins} mins`;
 }
 
+export function formatTravelTime(minutes: number | null | undefined): string {
+  if (!minutes || isNaN(minutes)) return '--';
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  if (hrs > 0 && mins > 0) return `${hrs}h ${mins}m`;
+  if (hrs > 0) return `${hrs} hrs`;
+  return `${mins} min`;
+}
+
+export function formatTransitHours(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined || isNaN(hours) || hours <= 0) return '--';
+  const hrs = Math.floor(hours);
+  const mins = Math.round((hours - hrs) * 60);
+  if (hrs > 0 && mins > 0) return `${hrs}h ${mins}m`;
+  if (hrs > 0) return `${hrs} hrs`;
+  return `${mins} min`;
+}
+
+

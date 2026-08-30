@@ -253,11 +253,12 @@ export class RiskService {
     }
 
     // Methane gas evaluation (Decomposition marker)
-    if (data.methane > 0.05) {
+    // Supports real MQ-4 sensor PPM (>25 elevated, >45 high decomposition) and normalized ranges
+    if (data.methane > 45 || (data.methane > 0.05 && data.methane < 1.0)) {
       score += 35;
       violations.push(`High decomposition gas detection (${data.methane} ppm CH4)`);
       recommendations.push('High volatile gas accumulation: Check cargo for packaging ruptures or early spoilage');
-    } else if (data.methane > 0.02) {
+    } else if (data.methane > 25 || (data.methane > 0.02 && data.methane < 1.0)) {
       score += 20;
       violations.push(`Trace methane gas detected (${data.methane} ppm CH4)`);
     }
@@ -337,8 +338,8 @@ export class RiskService {
       if (data.humidity > 88) degradation += 1.0;
       else if (data.humidity > 78) degradation += 0.4;
 
-      if (data.methane > 0.05) degradation += 3.5;
-      else if (data.methane > 0.02) degradation += 1.8;
+      if (data.methane > 45 || (data.methane > 0.05 && data.methane < 1.0)) degradation += 3.5;
+      else if (data.methane > 25 || (data.methane > 0.02 && data.methane < 1.0)) degradation += 1.8;
 
       if (data.co2 > 1200) degradation += 1.5;
       else if (data.co2 > 800) degradation += 0.6;

@@ -27,11 +27,14 @@ import {
   Hourglass
 } from 'lucide-react';
 import { LiveStatusBadge } from '../../components/common/LiveStatusBadge';
-import { formatNumber } from '../../utils/formatters';
+import { RouteRiskAnalysis } from '../../components/route/RouteRiskAnalysis';
+import { RouteAnalyzeResponse } from '../../api/routeApi';
+import { formatNumber, formatTravelTime } from '../../utils/formatters';
 
 export const DriverActiveDelivery: React.FC = () => {
   const [activeDeliveries, setActiveDeliveries] = useState<Delivery[]>([]);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
+  const [routeData, setRouteData] = useState<RouteAnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGpsEnabled] = useState(true);
   const toast = useToast();
@@ -339,7 +342,7 @@ export const DriverActiveDelivery: React.FC = () => {
                     No sensor data received yet. Waiting for hardware module transmission.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     <StatCard
                       title="Temperature"
                       value={`${formatNumber(latestSensor.temperature)}°C`}
@@ -356,9 +359,9 @@ export const DriverActiveDelivery: React.FC = () => {
                     />
                     <StatCard
                       title="Methane Gas"
-                      value={`${formatNumber(latestSensor.methane, 3)} ppm`}
+                      value={`${formatNumber(latestSensor.methane, latestSensor.methane >= 1 ? 1 : 3)} ppm`}
                       icon={<Wind className="w-5 h-5" />}
-                      variant={latestSensor.methane > 0.03 ? 'rose' : 'default'}
+                      variant={latestSensor.methane > 25 || (latestSensor.methane > 0.03 && latestSensor.methane < 1) ? 'rose' : 'default'}
                       subtitle="Spoilage marker"
                     />
                     <StatCard
@@ -367,6 +370,24 @@ export const DriverActiveDelivery: React.FC = () => {
                       icon={<Wind className="w-5 h-5" />}
                       variant={latestSensor.co2 > 1000 ? 'rose' : 'default'}
                       subtitle="Threshold: <1000"
+                    />
+                    <StatCard
+                      title="Total Est. Transit"
+                      value={
+                        routeData?.route
+                          ? formatTravelTime(
+                              routeData.route.estimated_travel_time_minutes ||
+                              Math.round(routeData.route.travel_time_minutes * 1.2)
+                            )
+                          : '--'
+                      }
+                      icon={<Navigation className="w-5 h-5" />}
+                      variant="sky"
+                      subtitle={
+                        routeData?.route
+                          ? `${routeData.route.distance_km.toFixed(0)} km (Route API)`
+                          : 'Route Weather API'
+                      }
                     />
                     <StatCard
                       title="Spoil In"
@@ -395,6 +416,9 @@ export const DriverActiveDelivery: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Route Risk & Weather Waypoint Analysis */}
+            <RouteRiskAnalysis delivery={selectedDelivery} onRouteDataLoaded={setRouteData} />
           </div>
         )}
       </div>

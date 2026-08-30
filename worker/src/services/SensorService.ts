@@ -5,6 +5,7 @@ import { LocationRepository } from '../db/repositories/LocationRepository';
 import { SecurityService } from './SecurityService';
 import { NotificationService } from './NotificationService';
 import { RiskService } from './RiskService';
+import { RouteService } from './RouteService';
 import { generateDeviceId, generateApiKey, sha256 } from '../utils/crypto';
 import { SensorModule, SensorLog, EnvBindings } from '../types';
 import { executeQuery } from '../db/connection';
@@ -238,6 +239,17 @@ export class SensorService {
     }
     const storageDays = params.storage_days !== undefined ? params.storage_days : (storageHours / 24);
 
+    // Fetch persistent route travel time from database (or weather-api once)
+    let routeTravelMinutes: number | undefined;
+    let routeTravelHours: number | undefined;
+    try {
+      const routeInfo = await RouteService.getDeliveryRouteAnalysis(delivery, env);
+      if (routeInfo?.route) {
+        routeTravelMinutes = routeInfo.route.travel_time_minutes;
+        routeTravelHours = routeInfo.route.estimated_travel_time_hours;
+      }
+    } catch (_) {}
+
     // Evaluate Spoilage Risk (ML Model Pipeline)
     const evalResult = await RiskService.evaluateRisk({
       delivery_id: delivery.id,
@@ -251,6 +263,8 @@ export class SensorService {
       days_stored: storageDays,
       storage_hours: storageHours,
       storage_days: storageDays,
+      estimated_travel_time_minutes: routeTravelMinutes,
+      estimated_travel_time_hours: routeTravelHours,
       spoil_in: params.spoil_in
     }, env);
 
@@ -439,6 +453,17 @@ export class SensorService {
     }
     const storageDays = telemetry.storage_days !== undefined ? telemetry.storage_days : (storageHours / 24);
 
+    // Fetch persistent route travel time from database (or weather-api once)
+    let routeTravelMinutes: number | undefined;
+    let routeTravelHours: number | undefined;
+    try {
+      const routeInfo = await RouteService.getDeliveryRouteAnalysis(activeDelivery, env);
+      if (routeInfo?.route) {
+        routeTravelMinutes = routeInfo.route.travel_time_minutes;
+        routeTravelHours = routeInfo.route.estimated_travel_time_hours;
+      }
+    } catch (_) {}
+
     // 7. Evaluate Spoilage Risk (ML Model Pipeline)
     const evalResult = await RiskService.evaluateRisk({
       delivery_id: activeDelivery.id,
@@ -452,6 +477,8 @@ export class SensorService {
       days_stored: storageDays,
       storage_days: storageDays,
       storage_hours: storageHours,
+      estimated_travel_time_minutes: routeTravelMinutes,
+      estimated_travel_time_hours: routeTravelHours,
       spoil_in: telemetry.spoil_in
     }, env);
 

@@ -17,7 +17,8 @@ import { useSensorData } from '../../hooks/useSensorData';
 import { useAuth } from '../../context/AuthContext';
 import { locationsApi } from '../../api/locations';
 import { DriverLocation } from '../../types';
-import { formatNumber, formatDate } from '../../utils/formatters';
+import { formatNumber, formatDate, formatTravelTime } from '../../utils/formatters';
+import { RouteAnalyzeResponse } from '../../api/routeApi';
 import { LiveStatusBadge } from '../../components/common/LiveStatusBadge';
 import {
   ArrowLeft,
@@ -35,7 +36,9 @@ import {
   Truck,
   Hourglass,
   Radio,
-  Share2
+  Share2,
+  Navigation,
+  Route
 } from 'lucide-react';
 
 export const DeliveryDetailPage: React.FC = () => {
@@ -44,6 +47,7 @@ export const DeliveryDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [routeData, setRouteData] = useState<RouteAnalyzeResponse | null>(null);
 
   const { delivery, loading: loadingDelivery, error: deliveryError, accept, reject, start, complete, refresh } =
     useDelivery(deliveryId);
@@ -217,7 +221,7 @@ export const DeliveryDetailPage: React.FC = () => {
               No sensor data received yet. Telemetry will begin once IoT hardware transmits data.
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <StatCard
                 title="Temperature"
                 value={`${formatNumber(latestSensor.temperature)}°C`}
@@ -234,9 +238,9 @@ export const DeliveryDetailPage: React.FC = () => {
               />
               <StatCard
                 title="Methane Gas"
-                value={`${formatNumber(latestSensor.methane, 3)} ppm`}
+                value={`${formatNumber(latestSensor.methane, latestSensor.methane >= 1 ? 1 : 3)} ppm`}
                 icon={<Wind className="w-5 h-5" />}
-                variant={latestSensor.methane > 0.03 ? 'rose' : 'default'}
+                variant={latestSensor.methane > 25 || (latestSensor.methane > 0.03 && latestSensor.methane < 1) ? 'rose' : 'default'}
                 subtitle="Decomposition gas"
               />
               <StatCard
@@ -247,11 +251,22 @@ export const DeliveryDetailPage: React.FC = () => {
                 subtitle="Safe: <1000 ppm"
               />
               <StatCard
-                title="Storage Hours"
-                value={`${formatNumber(elapsedHours, 1)} hrs`}
-                icon={<Clock className="w-5 h-5" />}
-                variant={elapsedHours > 48 ? 'amber' : 'default'}
-                subtitle={delivery.status === 'in_transit' ? 'Counting live' : 'Total transit duration'}
+                title="Total Est. Transit"
+                value={
+                  routeData?.route
+                    ? formatTravelTime(
+                        routeData.route.estimated_travel_time_minutes ||
+                        Math.round(routeData.route.travel_time_minutes * 1.2)
+                      )
+                    : '--'
+                }
+                icon={<Navigation className="w-5 h-5" />}
+                variant="sky"
+                subtitle={
+                  routeData?.route
+                    ? `${routeData.route.distance_km.toFixed(0)} km (Weather API)`
+                    : 'Via Route Weather API'
+                }
               />
               <StatCard
                 title="Spoil In"
@@ -297,7 +312,7 @@ export const DeliveryDetailPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column: Route Risk + Map + ML History */}
           <div className="flex flex-col gap-6 lg:col-span-2">
-            <RouteRiskAnalysis delivery={delivery} />
+            <RouteRiskAnalysis delivery={delivery} onRouteDataLoaded={setRouteData} />
 
             {/* Live GPS Map */}
             <SectionCard
@@ -411,6 +426,17 @@ export const DeliveryDetailPage: React.FC = () => {
                   </span>
                   <span className="font-bold text-slate-800">
                     {formatDate(delivery.start_time || delivery.created_at)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5 text-blue-500" /> Total Route Transit:
+                  </span>
+                  <span className="font-bold text-slate-900 font-mono text-xs">
+                    {routeData?.route
+                      ? `${formatTravelTime(routeData.route.estimated_travel_time_minutes || Math.round(routeData.route.travel_time_minutes * 1.2))} (${routeData.route.distance_km.toFixed(1)} km)`
+                      : 'Calculating from Route API...'}
                   </span>
                 </div>
 

@@ -45,7 +45,7 @@ export interface RouteAnalyzeParams {
 }
 
 const PRIMARY_ROUTE_URL = (import.meta as any).env?.VITE_ROUTE_API_URL || 'http://127.0.0.1:8000';
-const BACKEND_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8787';
+const BACKEND_URL = (import.meta as any).env?.VITE_API_URL || '';
 
 function normalizeResponse(json: any, endpointUrl?: string): RouteAnalyzeResponse {
   if (json.data && typeof json.data === 'object' && json.data.locations) {
@@ -169,5 +169,21 @@ export const routeApi = {
 
     if (lastError) throw lastError;
     throw new Error('Could not connect to weather/route analysis service at 127.0.0.1:8000.');
+  },
+
+  async getDeliveryRouteRisk(deliveryId: number): Promise<RouteAnalyzeResponse> {
+    const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND_URL}/api/v1/deliveries/${deliveryId}/route-risk`, {
+      headers
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch route risk for delivery #${deliveryId}`);
+    }
+    const json = await res.json();
+    return normalizeResponse(json.data || json);
   }
 };
+

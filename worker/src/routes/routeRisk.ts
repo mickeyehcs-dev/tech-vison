@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { calculateRouteRisk } from '../utils/routeRiskCalculator';
+import { RouteService } from '../services/RouteService';
 import { AppEnv } from '../types';
 
 const routeRiskRoutes = new Hono<AppEnv>();
@@ -22,41 +22,13 @@ routeRiskRoutes.post('/analyze', async (c) => {
     const depDate = departure_date || new Date().toISOString().split('T')[0];
     const depTime = departure_time || '09:30';
 
-    const payload = {
+    const result = await RouteService.getRouteAnalysis(
       current_location,
       destination,
-      departure_date: depDate,
-      departure_time: depTime
-    };
-
-    // Attempt to query upstream weather/route service at 127.0.0.1:8000
-    const routeUrl = c.env?.ROUTE_API_URL || 'http://127.0.0.1:8000';
-    const upstreamEndpoints = [
-      `${routeUrl}/api/analyze`,
-      `${routeUrl}/analyze`,
-      `http://127.0.0.1:8000/api/analyze`,
-      `http://127.0.0.1:8000/analyze`
-    ];
-
-    for (const upstream of upstreamEndpoints) {
-      try {
-        const upstreamRes = await fetch(upstream, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (upstreamRes.ok) {
-          const upstreamJson = await upstreamRes.json();
-          return c.json(upstreamJson);
-        }
-      } catch (_) {
-        // Continue to next endpoint or fallback
-      }
-    }
-
-    // Fallback to internal route risk calculator if external service is offline
-    const result = calculateRouteRisk(current_location, destination, depDate, depTime);
+      depDate,
+      depTime,
+      c.env
+    );
     return c.json(result);
   } catch (err: any) {
     return c.json(

@@ -1,4 +1,5 @@
 import { DeliveryRepository } from '../db/repositories/DeliveryRepository';
+import { RouteService } from './RouteService';
 import { SecurityService } from './SecurityService';
 import { NotificationService } from './NotificationService';
 import { generateDeliveryCode } from '../utils/crypto';
@@ -20,6 +21,26 @@ export class DeliveryService {
   ): Promise<Delivery> {
     const code = generateDeliveryCode();
 
+    // Compute and freeze Route Risk & Weather Forecast once at delivery creation
+    let routeRiskJson: string | null = null;
+    try {
+      const depDate = data.start_time
+        ? new Date(data.start_time).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      const routeAnalysis = await RouteService.getRouteAnalysis(
+        data.source_location,
+        data.destination_location,
+        depDate,
+        '09:30',
+        env
+      );
+      if (routeAnalysis) {
+        routeRiskJson = JSON.stringify(routeAnalysis);
+      }
+    } catch (routeErr) {
+      console.warn('[DeliveryService] Initial route analysis warning:', routeErr);
+    }
+
     const insertId = await DeliveryRepository.create(
       {
         delivery_code: code,
@@ -28,7 +49,8 @@ export class DeliveryService {
         source_location: data.source_location.trim(),
         destination_location: data.destination_location.trim(),
         start_time: data.start_time,
-        driver_id: data.driver_id || null
+        driver_id: data.driver_id || null,
+        route_risk_data: routeRiskJson
       },
       env
     );

@@ -3,6 +3,7 @@ import { DeliveryService } from '../services/DeliveryService';
 import { SensorService } from '../services/SensorService';
 import { PredictionRepository } from '../db/repositories/PredictionRepository';
 import { LocationService } from '../services/LocationService';
+import { RouteService } from '../services/RouteService';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireRole } from '../middleware/roleMiddleware';
 import { successResponse, errorResponse } from '../utils/response';
@@ -88,6 +89,24 @@ deliveryRoutes.get('/:id', async (c) => {
     return successResponse(c, delivery);
   } catch (err: any) {
     return errorResponse(c, err.message, 403);
+  }
+});
+
+// GET /api/v1/deliveries/:id/route-risk (Cached/persisted route risk)
+deliveryRoutes.get('/:id/route-risk', async (c) => {
+  try {
+    const user = c.get('user');
+    const id = parseInt(c.req.param('id') || '0', 10);
+
+    const delivery = await DeliveryService.getDeliveryById(id, user, c.env);
+    if (!delivery) {
+      return errorResponse(c, 'Delivery not found', 404);
+    }
+
+    const routeAnalysis = await RouteService.getDeliveryRouteAnalysis(delivery, c.env);
+    return successResponse(c, routeAnalysis);
+  } catch (err: any) {
+    return errorResponse(c, err.message, 500);
   }
 });
 

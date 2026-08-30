@@ -102,6 +102,7 @@ CREATE TABLE `deliveries` (
   `accepted_at` TIMESTAMP NULL DEFAULT NULL,
   `started_at` TIMESTAMP NULL DEFAULT NULL,
   `completed_at` TIMESTAMP NULL DEFAULT NULL,
+  `route_risk_data` LONGTEXT NULL DEFAULT NULL,
   INDEX `idx_deliv_code` (`delivery_code`),
   INDEX `idx_deliv_sender` (`sender_id`),
   INDEX `idx_deliv_driver` (`driver_id`),

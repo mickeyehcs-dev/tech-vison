@@ -15,11 +15,12 @@ import {
   ArrowRight,
   RefreshCw,
   Activity,
-  ShieldCheck
+  ShieldCheck,
+  Navigation
 } from 'lucide-react';
 import { DriverMap } from '../components/map/DriverMap';
 import { RouteRiskAnalysis } from '../components/route/RouteRiskAnalysis';
-import { formatDate } from '../utils/formatters';
+import { formatDate, formatTravelTime } from '../utils/formatters';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8787';
 
@@ -29,6 +30,7 @@ export const PublicTrackPage: React.FC = () => {
 
   const [searchCode, setSearchCode] = useState<string>(code || '');
   const [data, setData] = useState<any>(null);
+  const [liveRouteData, setLiveRouteData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(Boolean(code));
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
@@ -106,6 +108,15 @@ export const PublicTrackPage: React.FC = () => {
     elapsedHours = Math.max(0, parseFloat(((endMs - startMs) / (1000 * 3600)).toFixed(2)));
   }
 
+  const totalTransitMinutes =
+    liveRouteData?.route?.estimated_travel_time_minutes ||
+    (liveRouteData?.route?.travel_time_minutes ? Math.round(liveRouteData.route.travel_time_minutes * 1.2) : 0) ||
+    data?.routeRisk?.route?.estimated_travel_time_minutes ||
+    (data?.routeRisk?.route?.travel_time_minutes ? Math.round(data.routeRisk.route.travel_time_minutes * 1.2) : 0);
+
+  const totalRouteDistance =
+    liveRouteData?.route?.distance_km || data?.routeRisk?.route?.distance_km || 0;
+
   const getRiskTheme = (riskLevel?: string) => {
     const r = String(riskLevel || 'LOW').toUpperCase();
     if (r === 'HIGH' || r === 'CRITICAL') {
@@ -135,46 +146,46 @@ export const PublicTrackPage: React.FC = () => {
   const riskTheme = getRiskTheme(prediction?.risk_level);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
-      {/* Top Public Header Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-xs px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-black shadow-md shadow-emerald-500/20">
-            <Truck className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-black tracking-tight text-slate-900">
-              FoodGuard Live Tracking
-            </h1>
-            <p className="text-[10px] text-emerald-700 font-bold tracking-wider uppercase">
-              Cold-Chain & Spoilage Monitor
-            </p>
-          </div>
-        </Link>
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 selection:bg-emerald-500 selection:text-white pb-16">
+      {/* Header Nav */}
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-black shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+              SF
+            </div>
+            <div>
+              <span className="text-base font-black tracking-tight text-slate-900 block leading-none">
+                Smart<span className="text-emerald-600">Food</span>
+              </span>
+              <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 block mt-0.5">
+                Public Cargo Tracking
+              </span>
+            </div>
+          </Link>
 
-        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             to="/login"
             className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-xs transition-all flex items-center gap-1.5"
           >
-            <User className="w-3.5 h-3.5" />
-            <span>Staff Login</span>
+            <span>Portal Login</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </header>
 
-      {/* Main Track Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Search Bar */}
-        <div className="p-4 sm:p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm">
-          <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
+      {/* Main Track Dashboard */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 w-full flex-1">
+        {/* Search Bar Barcode Track Search */}
+        <div className="max-w-2xl mx-auto mb-8">
+          <form onSubmit={handleSearchSubmit} className="relative flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
-                placeholder="Enter Shipment / Tracking Code (e.g. DEL-C46A7B0C)..."
+                placeholder="Enter Tracking Code (e.g. SFM-839210 or Delivery ID)..."
                 className="w-full bg-slate-50 border border-slate-300 rounded-2xl pl-12 pr-4 py-3.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-xs"
               />
             </div>
@@ -183,58 +194,41 @@ export const PublicTrackPage: React.FC = () => {
               disabled={loading || !searchCode.trim()}
               className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
             >
-              {loading ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  <span>Track Live</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Track Run'}
             </button>
           </form>
         </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="p-6 rounded-3xl bg-rose-50 border border-rose-200 text-center space-y-3 shadow-xs">
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+        {/* Dynamic States */}
+        {loading && (
+          <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-xs max-w-xl mx-auto space-y-3">
+            <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto" />
+            <h3 className="text-base font-bold text-slate-900">Retrieving Live Cargo Telemetry...</h3>
+            <p className="text-xs text-slate-500">Querying real-time IoT readings, GPS location, and route weather.</p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="p-8 text-center bg-white rounded-3xl border border-rose-200 shadow-xs max-w-xl mx-auto space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-rose-900">{error}</h3>
-            <p className="text-xs text-slate-600 max-w-md mx-auto">
-              Please verify the tracking ID or contact your sender or logistics manager.
-            </p>
+            <h3 className="text-base font-bold text-slate-900">Shipment Lookup Failed</h3>
+            <p className="text-xs text-slate-500">{error}</p>
           </div>
         )}
 
-        {/* Empty State / Initial Landing info when no code entered */}
-        {!delivery && !loading && !error && (
-          <div className="p-8 sm:p-12 rounded-3xl bg-white border border-slate-200 shadow-sm text-center max-w-2xl mx-auto space-y-4">
-            <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-xs">
-              <ShieldCheck className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-black text-slate-900">
-              Live Public Shipment & Cold-Chain Tracking
-            </h3>
-            <p className="text-xs text-slate-500 leading-relaxed max-w-md mx-auto">
-              Enter your tracking code above to monitor real-time vehicle GPS coordinates, live cargo container temperature, humidity, decomposition gas telemetry, and spoilage risk forecasts.
-            </p>
-          </div>
-        )}
-
-        {/* Active Shipment Display */}
-        {delivery && (
+        {!loading && !error && delivery && (
           <div className="space-y-6">
-            {/* Shipment Overview Header Card */}
-            <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200/90 shadow-sm relative overflow-hidden">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            {/* Shipment Overview Header */}
+            <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-3">
                     <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                       {String(delivery.status || 'in_transit').replace('_', ' ')}
                     </span>
-                    <span className="font-mono text-xs text-slate-600 bg-slate-50 px-3 py-1 rounded-full border border-slate-200 font-bold">
+                    <span className="font-mono text-xs font-bold text-slate-500">
                       ID: {delivery.delivery_code}
                     </span>
                   </div>
@@ -250,14 +244,22 @@ export const PublicTrackPage: React.FC = () => {
                     </span>
                     <span className="text-slate-300">•</span>
                     <span className="text-emerald-700 font-mono font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      Transit: {elapsedHours.toFixed(1)} Hours ({(elapsedHours / 24).toFixed(2)} Days)
+                      Elapsed: {elapsedHours.toFixed(1)} hrs
                     </span>
+                    {totalTransitMinutes > 0 && (
+                      <>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-blue-700 font-mono font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 flex items-center gap-1">
+                          <Navigation className="w-3 h-3" />
+                          Est. Total Transit: {formatTravelTime(totalTransitMinutes)} ({totalRouteDistance.toFixed(0)} km)
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 {/* Share Action */}
                 <div className="flex items-center gap-3 shrink-0">
-                  {/* Copy Link */}
                   <button
                     onClick={handleCopyLink}
                     className="px-4 py-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-all flex items-center gap-2 shadow-xs cursor-pointer"
@@ -326,7 +328,7 @@ export const PublicTrackPage: React.FC = () => {
             </div>
 
             {/* Live Telemetry Gauges Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {/* Temperature */}
               <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-2">
                 <div className="flex items-center justify-between">
@@ -370,7 +372,11 @@ export const PublicTrackPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
-                  {sensor?.methane !== undefined ? Number(sensor.methane).toFixed(4) : '0.0120'}
+                  {sensor?.methane !== undefined
+                    ? Number(sensor.methane) >= 1
+                      ? Number(sensor.methane).toFixed(1)
+                      : Number(sensor.methane).toFixed(3)
+                    : '12.0'}
                   <span className="text-sm font-normal text-slate-400"> ppm</span>
                 </div>
                 <span className="text-[11px] text-purple-700 font-bold block">
@@ -392,6 +398,22 @@ export const PublicTrackPage: React.FC = () => {
                 </div>
                 <span className="text-[11px] text-teal-700 font-bold block">
                   Elapsed: {elapsedHours.toFixed(1)} hrs
+                </span>
+              </div>
+
+              {/* Total Estimated Transit Time from Route Weather API */}
+              <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-2 col-span-2 sm:col-span-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500">Total Est. Transit</span>
+                  <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
+                    <Navigation className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                  {totalTransitMinutes > 0 ? formatTravelTime(totalTransitMinutes) : '--'}
+                </div>
+                <span className="text-[11px] text-blue-700 font-bold block">
+                  {totalRouteDistance > 0 ? `${totalRouteDistance.toFixed(0)} km (Route Weather API)` : 'Via Route API'}
                 </span>
               </div>
             </div>
@@ -453,7 +475,7 @@ export const PublicTrackPage: React.FC = () => {
             </div>
 
             {/* Route Travel Risk API Weather Forecast */}
-            <RouteRiskAnalysis delivery={delivery} />
+            <RouteRiskAnalysis delivery={delivery} onRouteDataLoaded={setLiveRouteData} />
           </div>
         )}
       </main>

@@ -23,6 +23,9 @@ export interface RouteAnalyzeResponse {
   route: {
     distance_km: number;
     travel_time_minutes: number;
+    estimated_travel_time_minutes?: number;
+    estimated_travel_time_hours?: number;
+    delay_buffer_minutes?: number;
   };
   locations: RouteRiskWaypoint[];
   overall_risk: {
@@ -82,56 +85,113 @@ export function calculateRouteRisk(
   const cityStart = lookupCity(currentLocation);
   const cityEnd = lookupCity(destination);
 
-  const distanceKm = calculateDistance(cityStart.lat, cityStart.lng, cityEnd.lat, cityEnd.lng) || 320.5;
+  const distanceKm = calculateDistance(cityStart.lat, cityStart.lng, cityEnd.lat, cityEnd.lng) || 176.0;
   const travelTimeMinutes = parseFloat(((distanceKm / 55) * 60).toFixed(1));
 
   const depDateTime = `${departureDate}T${departureTime}:00+05:30`;
   const depTimeMs = new Date(depDateTime).getTime() || Date.now();
 
-  const locations: RouteRiskWaypoint[] = [
-    {
-      place: currentLocation,
-      distance_km: 0.0,
-      arrival_time: depDateTime,
-      temperature_c: parseFloat((cityStart.baseTemp + 0.5).toFixed(1)),
-      humidity_percent: cityStart.baseHum,
-      rain_probability_percent: 15,
-      wind_speed_kmh: 12.5,
-      risk: {
-        level: 'low',
-        score: 10,
-        factors: ['no elevated weather threshold met']
-      }
-    },
-    {
-      place: `Midway Highway Transit Point (km ${(distanceKm * 0.5).toFixed(0)})`,
-      distance_km: parseFloat((distanceKm * 0.5).toFixed(1)),
-      arrival_time: new Date(depTimeMs + travelTimeMinutes * 0.5 * 60000).toISOString(),
-      temperature_c: parseFloat((cityStart.baseTemp + 3.2).toFixed(1)),
-      humidity_percent: Math.min(95, cityStart.baseHum + 12),
-      rain_probability_percent: 35,
-      wind_speed_kmh: 18.2,
-      risk: {
-        level: 'moderate',
-        score: 28,
-        factors: ['elevated ambient temperature (>30°C)', 'moderate rain chance']
-      }
-    },
-    {
-      place: destination,
-      distance_km: distanceKm,
-      arrival_time: new Date(depTimeMs + travelTimeMinutes * 60000).toISOString(),
-      temperature_c: parseFloat((cityEnd.baseTemp + 1.2).toFixed(1)),
-      humidity_percent: cityEnd.baseHum,
-      rain_probability_percent: 20,
-      wind_speed_kmh: 14.0,
-      risk: {
-        level: 'low',
-        score: 15,
-        factors: ['no elevated weather threshold met']
-      }
+  const startLower = (currentLocation || '').toLowerCase();
+  const endLower = (destination || '').toLowerCase();
+
+  // Known corridor intermediate towns & villages
+  let intermediatePlaces: string[] = [];
+  if (
+    (startLower.includes('anantapur') && endLower.includes('madanapalle')) ||
+    (startLower.includes('madanapalle') && endLower.includes('anantapur'))
+  ) {
+    intermediatePlaces = [
+      'Battulapalle, Sri Sathya Sai',
+      'Mudigubba, Sri Sathya Sai',
+      'Nallacheruvu, Sri Sathya Sai',
+      'Mulakalacheruvu, Annamayya'
+    ];
+  } else if (
+    (startLower.includes('madanapalle') && endLower.includes('kadiri')) ||
+    (startLower.includes('kadiri') && endLower.includes('madanapalle'))
+  ) {
+    intermediatePlaces = [
+      'Kurabalakota, Annamayya',
+      'Mulakalacheruvu, Annamayya',
+      'Tanakallu, Sri Sathya Sai',
+      'Nallacheruvu, Sri Sathya Sai'
+    ];
+  } else if (
+    (startLower.includes('hyderabad') && (endLower.includes('madanapalle') || endLower.includes('anantapur') || endLower.includes('bangalore'))) ||
+    ((startLower.includes('madanapalle') || startLower.includes('anantapur') || startLower.includes('bangalore')) && endLower.includes('hyderabad'))
+  ) {
+    intermediatePlaces = [
+      'Jadcherla, Mahabubnagar',
+      'Kurnool, Kurnool Dist.',
+      'Gooty, Anantapuramu',
+      'Dharmavaram, Sri Sathya Sai'
+    ];
+  } else {
+    intermediatePlaces = [
+      `En-route Transit Point (+${(distanceKm * 0.33).toFixed(0)} km)`,
+      `En-route Transit Point (+${(distanceKm * 0.66).toFixed(0)} km)`
+    ];
+  }
+
+  const locations: RouteRiskWaypoint[] = [];
+
+  // 1. Origin
+  locations.push({
+    place: currentLocation,
+    distance_km: 0.0,
+    arrival_time: depDateTime,
+    temperature_c: parseFloat((cityStart.baseTemp + 0.5).toFixed(1)),
+    humidity_percent: cityStart.baseHum,
+    rain_probability_percent: 15,
+    wind_speed_kmh: 12.5,
+    risk: {
+      level: 'low',
+      score: 10,
+      factors: ['no elevated weather threshold met']
     }
-  ];
+  });
+
+  // 2. Intermediate Waypoints
+  const stepCount = intermediatePlaces.length;
+  intermediatePlaces.forEach((placeName, idx) => {
+    const fraction = (idx + 1) / (stepCount + 1);
+    const dist = parseFloat((distanceKm * fraction).toFixed(1));
+    const arrTime = new Date(depTimeMs + travelTimeMinutes * fraction * 60000).toISOString();
+    const temp = parseFloat((cityStart.baseTemp + (idx % 2 === 0 ? 3.0 : 1.5)).toFixed(1));
+    const hum = Math.min(95, cityStart.baseHum + idx * 4);
+    const rain = 20 + idx * 15;
+    const score = rain > 60 ? 35 : 15;
+    locations.push({
+      place: placeName,
+      distance_km: dist,
+      arrival_time: arrTime,
+      temperature_c: temp,
+      humidity_percent: hum,
+      rain_probability_percent: rain,
+      wind_speed_kmh: 18.0,
+      risk: {
+        level: score >= 30 ? 'moderate' : 'low',
+        score,
+        factors: score >= 30 ? ['moderate rain chance'] : ['no elevated weather threshold met']
+      }
+    });
+  });
+
+  // 3. Destination
+  locations.push({
+    place: destination,
+    distance_km: distanceKm,
+    arrival_time: new Date(depTimeMs + travelTimeMinutes * 60000).toISOString(),
+    temperature_c: parseFloat((cityEnd.baseTemp + 1.2).toFixed(1)),
+    humidity_percent: cityEnd.baseHum,
+    rain_probability_percent: 20,
+    wind_speed_kmh: 14.0,
+    risk: {
+      level: 'low',
+      score: 15,
+      factors: ['no elevated weather threshold met']
+    }
+  });
 
   const highestScore = Math.max(...locations.map((l) => l.risk.score));
   const overallLevel: 'low' | 'moderate' | 'high' =
@@ -144,7 +204,10 @@ export function calculateRouteRisk(
     departure_time: depDateTime,
     route: {
       distance_km: distanceKm,
-      travel_time_minutes: travelTimeMinutes
+      travel_time_minutes: travelTimeMinutes,
+      estimated_travel_time_minutes: Math.round(travelTimeMinutes * 1.20),
+      estimated_travel_time_hours: Number(((travelTimeMinutes * 1.20) / 60).toFixed(2)),
+      delay_buffer_minutes: Math.round(travelTimeMinutes * 0.20)
     },
     locations,
     overall_risk: {

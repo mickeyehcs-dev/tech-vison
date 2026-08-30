@@ -3,7 +3,7 @@ import { DeliveryRepository } from '../db/repositories/DeliveryRepository';
 import { SensorService } from '../services/SensorService';
 import { LocationService } from '../services/LocationService';
 import { PredictionRepository } from '../db/repositories/PredictionRepository';
-import { calculateRouteRisk } from '../utils/routeRiskCalculator';
+import { RouteService } from '../services/RouteService';
 import { successResponse, errorResponse } from '../utils/response';
 import { AppEnv } from '../types';
 
@@ -23,24 +23,18 @@ publicTrackingRoutes.get('/:code', async (c) => {
       return errorResponse(c, `Delivery with tracking ID "${code}" was not found.`, 404);
     }
 
-    // Fetch latest telemetry and location
-    const [latestSensor, locationData, predictions] = await Promise.all([
+    // Fetch latest telemetry, location and live route analysis in parallel
+    const depDate = delivery.start_time ? new Date(delivery.start_time).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+    const [latestSensor, locationData, predictions, routeRisk] = await Promise.all([
       SensorService.getLatestSensorData(delivery.id, c.env),
       LocationService.getLocationTrail(delivery.id, 50, c.env).then((trail) => ({
         trail,
         latest: trail[trail.length - 1] || null
       })),
-      PredictionRepository.getByDeliveryId(delivery.id, 10, c.env)
+      PredictionRepository.getByDeliveryId(delivery.id, 10, c.env),
+      RouteService.getDeliveryRouteAnalysis(delivery, c.env)
     ]);
-
-    // Calculate Route Travel Risk
-    const depDate = delivery.start_time ? new Date(delivery.start_time).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-    const routeRisk = calculateRouteRisk(
-      delivery.source_location,
-      delivery.destination_location,
-      depDate,
-      '09:30'
-    );
 
     return successResponse(c, {
       delivery,

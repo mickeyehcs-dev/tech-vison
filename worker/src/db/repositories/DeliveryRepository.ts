@@ -65,6 +65,7 @@ export class DeliveryRepository {
       destination_location: string;
       start_time?: string;
       driver_id?: number | null;
+      route_risk_data?: string | null;
     },
     env?: EnvBindings
   ): Promise<number> {
@@ -88,8 +89,8 @@ export class DeliveryRepository {
     }
 
     const result = await executeQuery<ResultSetHeader>(
-      `INSERT INTO deliveries (delivery_code, sender_id, driver_id, sensor_module_id, food_name, source_location, destination_location, start_time, status, assigned_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO deliveries (delivery_code, sender_id, driver_id, sensor_module_id, food_name, source_location, destination_location, start_time, status, assigned_at, route_risk_data, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         data.delivery_code,
         data.sender_id,
@@ -100,11 +101,25 @@ export class DeliveryRepository {
         data.destination_location,
         formatMySqlDateTime(data.start_time) || formatMySqlDateTime(new Date()),
         initialStatus,
-        assignedAt
+        assignedAt,
+        data.route_risk_data || null
       ],
       env
     );
     return result.insertId;
+  }
+
+  static async updateRouteRiskData(
+    deliveryId: number,
+    routeRiskData: string,
+    env?: EnvBindings
+  ): Promise<boolean> {
+    const res = await executeQuery<ResultSetHeader>(
+      'UPDATE deliveries SET route_risk_data = ? WHERE id = ?',
+      [routeRiskData, deliveryId],
+      env
+    );
+    return res.affectedRows > 0;
   }
 
   static async assignDriver(

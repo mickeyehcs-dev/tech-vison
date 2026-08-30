@@ -31,8 +31,8 @@ export const TelemetryMultiChart: React.FC<TelemetryMultiChartProps> = ({ logs, 
     temperature: Number(log.temperature),
     humidity: Number(log.humidity),
     riskScore: Number(log.score),
-    methane: Number(log.methane) * 100,
-    co2: Number(log.co2) / 10
+    methane: Number(log.methane),
+    co2: Number(log.co2)
   }));
 
   return (

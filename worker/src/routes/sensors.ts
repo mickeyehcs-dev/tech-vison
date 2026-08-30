@@ -37,10 +37,36 @@ const handleSensorDataIngest = async (c: any) => {
     // Flexible extraction for IoT sensor fields
     const rawTemp = body.temp ?? body.temperature ?? body.Temperature ?? body.TEMP;
     const rawHum = body.humidity ?? body.Humidity ?? body.HUMIDITY ?? body.hum;
-    const rawMethane = body.methane ?? body.Methane ?? body.METHANE ?? body.gas ?? body.ch4;
+    const rawMethane =
+      body.methane_ppm ??
+      body.methane ??
+      body.Methane ??
+      body.METHANE ??
+      body.methanePpm ??
+      body.Methane_ppm ??
+      body.gas ??
+      body.gas_ppm ??
+      body.ch4 ??
+      body.CH4 ??
+      body.ch4_ppm ??
+      body.CH4_ppm ??
+      body.mq4 ??
+      body.MQ4 ??
+      body.mq_4 ??
+      body.MQ_4;
     const rawLat = body.latitude ?? body.lat ?? body.Latitude ?? body.Lat ?? body.LATITUDE;
     const rawLng = body.logitutude ?? body.longitude ?? body.lng ?? body.lon ?? body.Longitude ?? body.Logitutude ?? body.LONGITUDE;
-    const rawCo2 = body.co2 ?? body.CO2 ?? body.co2_ppm ?? body.CO2_ppm ?? body.carbon_dioxide ?? body.carbonDioxide ?? body.mq135 ?? body.ppm;
+    const rawCo2 =
+      body.co2_ppm ??
+      body.co2 ??
+      body.CO2 ??
+      body.CO2_ppm ??
+      body.co2Ppm ??
+      body.carbon_dioxide ??
+      body.carbonDioxide ??
+      body.mq135 ??
+      body.MQ135 ??
+      body.ppm;
 
     const storage_hours = body.storage_hours ?? body.hours;
     const storage_days = body.storage_days ?? body.days ?? body.Storage_Days;
@@ -225,12 +251,38 @@ sensorRoutes.post('/test-inject', async (c) => {
       };
     }
     const body = await c.req.json();
-    const rawTemp = body.temp ?? body.temperature;
-    const rawHum = body.humidity;
-    const rawMethane = body.methane ?? body.gas;
-    const rawLat = body.latitude ?? body.lat;
-    const rawLng = body.logitutude ?? body.longitude ?? body.lng ?? body.lon;
-    const rawCo2 = body.co2;
+    const rawTemp = body.temp ?? body.temperature ?? body.Temperature ?? body.TEMP;
+    const rawHum = body.humidity ?? body.Humidity ?? body.HUMIDITY ?? body.hum;
+    const rawMethane =
+      body.methane_ppm ??
+      body.methane ??
+      body.Methane ??
+      body.METHANE ??
+      body.methanePpm ??
+      body.Methane_ppm ??
+      body.gas ??
+      body.gas_ppm ??
+      body.ch4 ??
+      body.CH4 ??
+      body.ch4_ppm ??
+      body.CH4_ppm ??
+      body.mq4 ??
+      body.MQ4 ??
+      body.mq_4 ??
+      body.MQ_4;
+    const rawLat = body.latitude ?? body.lat ?? body.Latitude ?? body.Lat;
+    const rawLng = body.logitutude ?? body.longitude ?? body.lng ?? body.lon ?? body.Longitude ?? body.Logitutude;
+    const rawCo2 =
+      body.co2_ppm ??
+      body.co2 ??
+      body.CO2 ??
+      body.CO2_ppm ??
+      body.co2Ppm ??
+      body.carbon_dioxide ??
+      body.carbonDioxide ??
+      body.mq135 ??
+      body.MQ135 ??
+      body.ppm;
 
     if (rawTemp === undefined || rawHum === undefined) {
       return errorResponse(c, 'Temperature and humidity are required', 400);

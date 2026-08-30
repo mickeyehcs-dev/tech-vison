@@ -39,6 +39,7 @@ export interface Delivery {
   accepted_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  route_risk_data?: string | null;
   // Joined fields
   sender_name?: string;
   sender_email?: string;

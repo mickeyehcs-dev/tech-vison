@@ -16,10 +16,11 @@ import {
   ShieldCheck,
   RefreshCw
 } from 'lucide-react';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, formatTravelTime } from '../../utils/formatters';
 
 export interface RouteRiskAnalysisProps {
   delivery: Delivery;
+  onRouteDataLoaded?: (data: RouteAnalyzeResponse) => void;
 }
 
 function cleanLocation(loc: string): string {
@@ -35,7 +36,7 @@ function cleanLocation(loc: string): string {
   return cleaned;
 }
 
-export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery }) => {
+export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery, onRouteDataLoaded }) => {
   const [data, setData] = useState<RouteAnalyzeResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,69 +72,144 @@ export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery }
     return { dateStr, timeStr };
   };
 
-  const fetchRouteAnalysis = useCallback(async () => {
-    if (!origin || !dest) {
-      setError('Please provide valid current location and destination');
-      setLoading(false);
-      return;
+  useEffect(() => {
+    // 1. Check if delivery already has stored route_risk_data from database
+    if (delivery.route_risk_data) {
+      try {
+        const stored = typeof delivery.route_risk_data === 'string'
+          ? JSON.parse(delivery.route_risk_data)
+          : delivery.route_risk_data;
+        if (stored && stored.route) {
+          setData(stored);
+          setLoading(false);
+          setIsDemoMode(false);
+          setError(null);
+          if (onRouteDataLoaded) {
+            onRouteDataLoaded(stored);
+          }
+          return;
+        }
+      } catch (err) {
+        console.warn('[RouteRiskAnalysis] Failed to parse stored route_risk_data, falling back to API:', err);
+      }
     }
 
+    // 2. Otherwise fetch once from backend / weather API and cache
+    let isCancelled = false;
+    const loadRouteData = async () => {
+      if (!origin || !dest) {
+        setError('Please provide valid current location and destination');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      const schedule = getTripStartSchedule();
+      const departure_date = schedule.dateStr;
+      const departure_time = schedule.timeStr;
+
+      const payload = {
+        current_location: origin,
+        destination: dest,
+        departure_date,
+        departure_time
+      };
+
+      try {
+        let res: RouteAnalyzeResponse;
+        if (delivery.id) {
+          try {
+            res = await routeApi.getDeliveryRouteRisk(delivery.id);
+          } catch (_) {
+            res = await routeApi.analyzeRoute(payload);
+          }
+        } else {
+          res = await routeApi.analyzeRoute(payload);
+        }
+
+        if (!isCancelled) {
+          setData(res);
+          setIsDemoMode(false);
+          setError(null);
+          if (onRouteDataLoaded) {
+            onRouteDataLoaded(res);
+          }
+        }
+      } catch (err: any) {
+        if (!isCancelled) {
+          console.error('[RouteRiskAnalysis] Route API request error:', err);
+          setError(err.message || 'Unable to connect to Weather / Route API at 127.0.0.1:8000');
+          setIsDemoMode(true);
+          const sim = generateSimulatedRoute(origin, dest, departure_date, departure_time);
+          setData(sim);
+          if (onRouteDataLoaded) {
+            onRouteDataLoaded(sim);
+          }
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadRouteData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [delivery.id, delivery.route_risk_data]);
+
+  const handleManualRefresh = useCallback(async () => {
+    if (!origin || !dest) return;
     setLoading(true);
     setError(null);
-
     const schedule = getTripStartSchedule();
-    const departure_date = schedule.dateStr;
-    const departure_time = schedule.timeStr;
-
     const payload = {
       current_location: origin,
       destination: dest,
-      departure_date,
-      departure_time
+      departure_date: schedule.dateStr,
+      departure_time: schedule.timeStr
     };
-
     try {
-      console.log('[RouteRiskAnalysis] Calling live routeApi with payload:', payload);
       const res = await routeApi.analyzeRoute(payload);
       setData(res);
       setIsDemoMode(false);
       setError(null);
+      if (onRouteDataLoaded) {
+        onRouteDataLoaded(res);
+      }
     } catch (err: any) {
-      console.error('[RouteRiskAnalysis] Route API request error:', err);
-      setError(err.message || 'Unable to connect to Weather / Route API at 127.0.0.1:8000');
-      setIsDemoMode(true);
-      setData(generateSimulatedRoute(origin, dest, departure_date, departure_time));
+      setError(err.message || 'Unable to connect to Weather / Route API');
     } finally {
       setLoading(false);
     }
-  }, [origin, dest, delivery.id, delivery.started_at, delivery.start_time]);
-
-  useEffect(() => {
-    fetchRouteAnalysis();
-  }, [fetchRouteAnalysis]);
+  }, [origin, dest, onRouteDataLoaded]);
 
   const getRiskBadge = (level: string) => {
     const l = (level || 'low').toLowerCase();
     if (l === 'high') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1 w-fit">
+          <AlertTriangle className="w-3 h-3 text-rose-600" />
           High Risk
         </span>
       );
     }
     if (l === 'moderate' || l === 'medium') {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 w-fit">
+          <AlertTriangle className="w-3 h-3 text-amber-600" />
           Moderate Risk
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-        Safe / Low Risk
+      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 w-fit">
+        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+        Safe Route
       </span>
     );
   };
@@ -146,27 +222,22 @@ export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery }
   return (
     <SectionCard
       title={
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 shadow-xs">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
             <Compass className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">
+              <span className="font-bold text-slate-900 text-sm sm:text-base">
                 Route Travel Risk & Weather Forecast
               </span>
-              {isDemoMode ? (
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                  Offline Fallback
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                  Live API (127.0.0.1:8000)
+              {isDemoMode && (
+                <span className="px-2 py-0.2 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                  Simulated
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-500 font-normal">
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
               Trip departure weather hazard evaluation and driving route analysis
             </p>
           </div>
@@ -176,7 +247,7 @@ export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery }
         <div className="flex items-center gap-2">
           {/* Refresh button */}
           <button
-            onClick={() => fetchRouteAnalysis()}
+            onClick={handleManualRefresh}
             disabled={loading}
             className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
             title="Refresh Route Weather API"
@@ -224,7 +295,7 @@ export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery }
             </div>
           </div>
           <button
-            onClick={() => fetchRouteAnalysis()}
+            onClick={handleManualRefresh}
             className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shrink-0 cursor-pointer"
           >
             Retry Call
@@ -513,16 +584,6 @@ export const RouteRiskAnalysis: React.FC<RouteRiskAnalysisProps> = ({ delivery }
   );
 };
 
-function formatTravelTime(minutes: number): string {
-  if (!minutes || isNaN(minutes)) return '0 min';
-  const hrs = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-  if (hrs > 0) {
-    return `${hrs}h ${mins}m`;
-  }
-  return `${mins} min`;
-}
-
 function generateSimulatedRoute(
   source: string,
   dest: string,
@@ -530,64 +591,112 @@ function generateSimulatedRoute(
   departureTime: string
 ): RouteAnalyzeResponse {
   const depIso = `${departureDate}T${departureTime}:00+05:30`;
+  const sLower = (source || '').toLowerCase();
+  const dLower = (dest || '').toLowerCase();
+
+  let midVillage = 'Battulapalle, Sri Sathya Sai';
+  let midVillage2 = 'Mudigubba, Sri Sathya Sai';
+  let midVillage3 = 'Mulakalacheruvu, Annamayya';
+  let dist = 176.3;
+
+  if (sLower.includes('kadiri') || dLower.includes('kadiri')) {
+    midVillage = 'Kurabalakota, Annamayya';
+    midVillage2 = 'Mulakalacheruvu, Annamayya';
+    midVillage3 = 'Tanakallu, Sri Sathya Sai';
+    dist = 86.5;
+  } else if (sLower.includes('hyderabad') || dLower.includes('hyderabad')) {
+    midVillage = 'Kurnool, Kurnool Dist.';
+    midVillage2 = 'Gooty, Anantapuramu';
+    midVillage3 = 'Jadcherla, Mahabubnagar';
+    dist = 530.3;
+  }
+
   return {
     departure_time: depIso,
     route: {
-      distance_km: 248.6,
-      travel_time_minutes: 275.0,
-      estimated_travel_time_minutes: 330.0,
-      estimated_travel_time_hours: 5.5,
-      delay_buffer_minutes: 55.0
+      distance_km: dist,
+      travel_time_minutes: Math.round((dist / 55) * 60),
+      estimated_travel_time_minutes: Math.round((dist / 55) * 60 * 1.2),
+      estimated_travel_time_hours: Number((((dist / 55) * 60 * 1.2) / 60).toFixed(2)),
+      delay_buffer_minutes: Math.round((dist / 55) * 60 * 0.2)
     },
     locations: [
       {
         place: source,
         distance_km: 0.0,
         arrival_time: depIso,
-        temperature_c: 27.5,
-        humidity_percent: 68,
-        rain_probability_percent: 15,
-        wind_speed_kmh: 12.0,
+        temperature_c: 32.5,
+        humidity_percent: 48,
+        rain_probability_percent: 25,
+        wind_speed_kmh: 16.0,
         risk: {
           level: 'low',
-          score: 5,
+          score: 10,
           factors: ['no elevated weather threshold met']
         }
       },
       {
-        place: `Midway Junction (${source} - ${dest})`,
-        distance_km: 124.3,
-        arrival_time: new Date(Date.now() + 2 * 3600000).toISOString(),
-        temperature_c: 31.2,
-        humidity_percent: 74,
-        rain_probability_percent: 35,
-        wind_speed_kmh: 18.5,
+        place: midVillage,
+        distance_km: Number((dist * 0.25).toFixed(1)),
+        arrival_time: new Date(Date.now() + 0.75 * 3600000).toISOString(),
+        temperature_c: 33.2,
+        humidity_percent: 52,
+        rain_probability_percent: 65,
+        wind_speed_kmh: 22.5,
         risk: {
           level: 'moderate',
-          score: 28,
-          factors: ['elevated temperature (>30°C)', 'moderate rain chance']
+          score: 30,
+          factors: ['moderate rain chance']
+        }
+      },
+      {
+        place: midVillage2,
+        distance_km: Number((dist * 0.50).toFixed(1)),
+        arrival_time: new Date(Date.now() + 1.5 * 3600000).toISOString(),
+        temperature_c: 32.0,
+        humidity_percent: 55,
+        rain_probability_percent: 75,
+        wind_speed_kmh: 24.0,
+        risk: {
+          level: 'moderate',
+          score: 35,
+          factors: ['high rain probability']
+        }
+      },
+      {
+        place: midVillage3,
+        distance_km: Number((dist * 0.75).toFixed(1)),
+        arrival_time: new Date(Date.now() + 2.25 * 3600000).toISOString(),
+        temperature_c: 30.5,
+        humidity_percent: 60,
+        rain_probability_percent: 45,
+        wind_speed_kmh: 20.0,
+        risk: {
+          level: 'low',
+          score: 15,
+          factors: ['no elevated weather threshold met']
         }
       },
       {
         place: dest,
-        distance_km: 248.6,
-        arrival_time: new Date(Date.now() + 4.5 * 3600000).toISOString(),
-        temperature_c: 29.0,
-        humidity_percent: 70,
-        rain_probability_percent: 20,
-        wind_speed_kmh: 14.0,
+        distance_km: dist,
+        arrival_time: new Date(Date.now() + 3.0 * 3600000).toISOString(),
+        temperature_c: 29.8,
+        humidity_percent: 62,
+        rain_probability_percent: 30,
+        wind_speed_kmh: 18.0,
         risk: {
           level: 'low',
-          score: 10,
+          score: 12,
           factors: ['no elevated weather threshold met']
         }
       }
     ],
     overall_risk: {
       level: 'moderate',
-      score: 28,
-      highest_risk_places: [`Midway Junction`],
-      method: 'Offline estimate'
+      score: 35,
+      highest_risk_places: [midVillage2],
+      method: 'Rule-based weather risk using temperature, humidity, rain probability, and wind speed.'
     }
   };
 }
