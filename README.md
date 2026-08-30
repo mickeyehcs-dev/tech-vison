@@ -590,7 +590,4 @@ c:\hackthon\
 
 ---
 
-## 📄 License & Intellectual Property
 
-Developed for the Smart Cold-Chain & AIoT Food Spoilage Prevention Initiative.  
-Licensed under the **MIT License**. Free for academic, enterprise, and non-commercial research use.
