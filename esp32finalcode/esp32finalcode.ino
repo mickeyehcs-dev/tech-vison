@@ -1,3 +1,4 @@
+
 /*
   ==========================================================
   MQ-4 + MQ-135 + DHT11 + GPS + WiFi JSON TELEMETRY
@@ -116,6 +117,36 @@ const float B_CH4 = -2.786;
 // ==========================================================
 
 float R0 = 0.0;
+
+
+// ==========================================================
+// MQ-135 CONSTANTS
+// ==========================================================
+
+const float RL_VALUE_MQ135 = 10.0;
+
+// Clean-air ratio for MQ-135
+const float AIR_RATIO_MQ135 = 3.6;
+
+
+// ==========================================================
+// MQ-135 CO2 CURVE PARAMETERS
+// ==========================================================
+//
+// Approximate CO2 curve.
+// These values should be calibrated with your actual
+// MQ-135 sensor/module for accurate CO2 measurements.
+//
+
+const float A_CO2 = 116.6020682;
+const float B_CO2 = -2.769034857;
+
+
+// ==========================================================
+// MQ-135 R0
+// ==========================================================
+
+float R0_MQ135 = 0.0;
 
 
 // ==========================================================
@@ -441,6 +472,75 @@ void setup() {
   );
 
 
+  // ========================================================
+  // MQ-135 CALIBRATION
+  // ========================================================
+
+  Serial.println();
+  Serial.println(
+    "Calibrating MQ-135 R0 in clean air..."
+  );
+
+  float rsSumMQ135 = 0.0;
+
+
+  for (int i = 0; i < 100; i++) {
+
+    int raw135 =
+      analogRead(MQ135_PIN);
+
+
+    // ESP32 ADC = 0 to 4095
+    float vOut135 =
+      (raw135 / 4095.0) * 3.3;
+
+
+    if (vOut135 < 0.01) {
+
+      vOut135 = 0.01;
+    }
+
+
+    // Calculate MQ-135 Rs
+    float rsCurrent135 =
+      RL_VALUE_MQ135 *
+      (3.3 - vOut135) /
+      vOut135;
+
+
+    rsSumMQ135 +=
+      rsCurrent135;
+
+
+    delay(50);
+  }
+
+
+  // Average Rs
+  float avgRsCleanAirMQ135 =
+    rsSumMQ135 / 100.0;
+
+
+  // Calculate MQ-135 R0
+  R0_MQ135 =
+    avgRsCleanAirMQ135 /
+    AIR_RATIO_MQ135;
+
+
+  Serial.print(
+    "MQ-135 R0 = "
+  );
+
+  Serial.print(
+    R0_MQ135,
+    3
+  );
+
+  Serial.println(
+    " kOhm"
+  );
+
+
   // --------------------------------------------------------
   // System Ready
   // --------------------------------------------------------
@@ -538,31 +638,50 @@ void loop() {
   // ========================================================
   // READ MQ-135
   // ========================================================
-  //
-  // This section is replaced with the user's MQ-135 code.
-  // It takes 10 samples and calculates their average.
-  //
 
-  long sum = 0;
+  int rawADC135 =
+    analogRead(MQ135_PIN);
 
-  int samples = 10;
 
-  for (int i = 0; i < samples; i++) {
+  // ESP32 ADC conversion
+  float voltage135 =
+    (rawADC135 / 4095.0) * 3.3;
 
-    sum += analogRead(MQ135_PIN);
 
-    delay(10);
+  if (voltage135 < 0.01) {
+
+    voltage135 = 0.01;
   }
 
-  int rawAnalogValue =
-    sum / samples;
+
+  // ========================================================
+  // CALCULATE MQ-135 Rs
+  // ========================================================
+
+  float Rs135 =
+    RL_VALUE_MQ135 *
+    (3.3 - voltage135) /
+    voltage135;
 
 
-  // Use the raw averaged MQ-135 value
-  // as the CO2 value sent to the server.
+  // ========================================================
+  // CALCULATE MQ-135 Rs/R0
+  // ========================================================
+
+  float ratio135 =
+    Rs135 / R0_MQ135;
+
+
+  // ========================================================
+  // CALCULATE CO2 PPM
+  // ========================================================
 
   float co2ppm =
-    rawAnalogValue;
+    A_CO2 *
+    pow(
+      ratio135,
+      B_CO2
+    );
 
 
   // ========================================================
@@ -656,24 +775,21 @@ void loop() {
 
 
   // --------------------------------------------------------
-  // MQ-135
+  // MQ-135 CO2
   // --------------------------------------------------------
 
   Serial.print(
-    "MQ-135 Raw Analog Value: "
+    "MQ-135 Voltage: "
+  );
+
+  Serial.print(
+    voltage135,
+    2
   );
 
   Serial.println(
-    rawAnalogValue
+    " V"
   );
-
-
-  if (rawAnalogValue > 1200) {
-
-    Serial.println(
-      "Warning: Elevated gas/smoke levels detected!"
-    );
-  }
 
 
   Serial.print(
@@ -850,3 +966,4 @@ void loop() {
 
   delay(1000);
 }
+
