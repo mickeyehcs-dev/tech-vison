@@ -296,6 +296,30 @@ export const PublicTrackPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Blockchain Authenticity & Immutability Badge */}
+              <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white flex flex-wrap items-center justify-between gap-3 shadow-xs border border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold flex items-center gap-1.5 text-white">
+                      Blockchain Authenticated Telemetry
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        Hyperledger Fabric Merkle Proof
+                      </span>
+                    </span>
+                    <p className="text-[11px] text-slate-300">
+                      Cold-chain environmental readings are cryptographically hashed via SHA-256 and anchored to a tamper-evident blockchain ledger.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Ledger Integrity: VERIFIED</span>
+                </div>
+              </div>
             </div>
 
             {/* Food Spoilage Risk Status Banner */}

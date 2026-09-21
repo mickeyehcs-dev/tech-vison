@@ -26,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const adminLinks = [
     { to: '/admin/overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
     { to: '/admin/deliveries', label: 'Deliveries', icon: <Truck className="w-4 h-4" /> },
+    { to: '/blockchain', label: 'Blockchain Integrity', icon: <ShieldCheck className="w-4 h-4 text-emerald-600" /> },
     { to: '/admin/users', label: 'Manage Users', icon: <Users className="w-4 h-4" /> },
     { to: '/admin/sensors', label: 'Sensor Modules', icon: <Cpu className="w-4 h-4" /> },
     { to: '/admin/security-logs', label: 'Security Logs', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -37,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { to: '/sender/overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
     { to: '/sender/create-delivery', label: 'Create Delivery', icon: <PlusCircle className="w-4 h-4" /> },
     { to: '/sender/deliveries', label: 'My Deliveries', icon: <Truck className="w-4 h-4" /> },
+    { to: '/blockchain', label: 'Blockchain Integrity', icon: <ShieldCheck className="w-4 h-4 text-emerald-600" /> },
     { to: '/notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" /> },
     { to: '/profile', label: 'Profile Settings', icon: <User className="w-4 h-4" /> }
   ];
@@ -45,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { to: '/driver/overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
     { to: '/driver/active', label: 'On-Road Tracker', icon: <Radio className="w-4 h-4 text-emerald-600 animate-pulse" /> },
     { to: '/driver/deliveries', label: 'Assigned Deliveries', icon: <Truck className="w-4 h-4" /> },
+    { to: '/blockchain', label: 'Blockchain Integrity', icon: <ShieldCheck className="w-4 h-4 text-emerald-600" /> },
     { to: '/notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" /> },
     { to: '/profile', label: 'Profile Settings', icon: <User className="w-4 h-4" /> }
   ];

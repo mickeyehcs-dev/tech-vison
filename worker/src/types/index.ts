@@ -82,6 +82,7 @@ export interface SensorLog {
   id: number;
   delivery_id: number;
   sensor_module_id: number;
+  sequence_number: number;
   temperature: number;
   humidity: number;
   methane: number;
@@ -92,8 +93,76 @@ export interface SensorLog {
   status: string;
   risk_level: RiskLevel;
   spoil_in?: number | null;
+  record_hash?: string | null;
+  previous_hash?: string | null;
   device_recorded_at?: string | null;
   recorded_at: string;
+  // Joined fields
+  delivery_code?: string;
+  food_name?: string;
+  device_id?: string;
+}
+
+export type BlockchainBatchStatus = 'PENDING' | 'ANCHORED' | 'VERIFIED' | 'TAMPERED' | 'FAILED';
+export type BatchType = 'PERIODIC_HOURLY' | 'BATCH_SIZE_THRESHOLD' | 'CRITICAL_EVENT' | 'MANUAL_TRIGGER';
+
+export interface BlockchainBatch {
+  id: number;
+  batch_id: string;
+  delivery_id: number;
+  device_id: string;
+  start_sequence: number;
+  end_sequence: number;
+  record_count: number;
+  start_time: string;
+  end_time: string;
+  merkle_root: string;
+  blockchain_tx_id: string;
+  block_number: number;
+  blockchain_status: BlockchainBatchStatus;
+  batch_type: BatchType;
+  tamper_event_type?: string | null;
+  metadata_json?: any;
+  verified_at?: string | null;
+  created_at: string;
+  // Joined fields
+  delivery_code?: string;
+  food_name?: string;
+  driver_name?: string;
+}
+
+export interface BlockchainVerification {
+  id: number;
+  batch_id: string;
+  delivery_id: number;
+  status: 'VALID' | 'TAMPERED' | 'ERROR';
+  calculated_merkle_root: string;
+  blockchain_merkle_root: string;
+  hash_chain_valid: number;
+  tampered_record_count: number;
+  details_json?: any;
+  verified_by: string;
+  verified_at: string;
+}
+
+export interface MerkleProofNode {
+  position: 'left' | 'right';
+  hash: string;
+}
+
+export interface MerkleProof {
+  leaf: string;
+  index: number;
+  proof: MerkleProofNode[];
+  root: string;
+}
+
+export interface MerkleTreeStructure {
+  root: string;
+  leaves: string[];
+  depth: number;
+  levels: string[][];
+  totalNodes: number;
 }
 
 export interface ModelPrediction {

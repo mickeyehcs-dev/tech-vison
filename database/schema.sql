@@ -142,6 +142,7 @@ CREATE TABLE `sensor_logs` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `delivery_id` INT UNSIGNED NOT NULL,
   `sensor_module_id` INT UNSIGNED NOT NULL,
+  `sequence_number` BIGINT UNSIGNED NOT NULL DEFAULT 1,
   `temperature` DECIMAL(5, 2) NOT NULL,
   `humidity` DECIMAL(5, 2) NOT NULL,
   `methane` DECIMAL(8, 4) NOT NULL DEFAULT 0.0000,
@@ -152,10 +153,14 @@ CREATE TABLE `sensor_logs` (
   `status` VARCHAR(50) NOT NULL DEFAULT 'LOW',
   `risk_level` ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'UNKNOWN') NOT NULL DEFAULT 'LOW',
   `spoil_in` DECIMAL(7, 2) NULL DEFAULT NULL,
+  `record_hash` VARCHAR(64) NULL DEFAULT NULL,
+  `previous_hash` VARCHAR(64) NULL DEFAULT NULL,
   `device_recorded_at` TIMESTAMP NULL DEFAULT NULL,
   `recorded_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX `idx_sl_delivery` (`delivery_id`),
   INDEX `idx_sl_sensor` (`sensor_module_id`),
+  INDEX `idx_sl_seq` (`delivery_id`, `sequence_number`),
+  INDEX `idx_sl_hash` (`record_hash`),
   INDEX `idx_sl_recorded` (`recorded_at`),
   INDEX `idx_sl_deliv_rec` (`delivery_id`, `recorded_at`),
   CONSTRAINT `fk_sl_delivery` FOREIGN KEY (`delivery_id`) REFERENCES `deliveries` (`id`) ON DELETE CASCADE,
@@ -246,7 +251,63 @@ CREATE TABLE `driver_locations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
--- 11. Table: system_settings
+-- 11. Table: blockchain_batches
+-- Cryptographic batch proofs and Merkle roots anchored to Hyperledger Fabric
+-- --------------------------------------------------------
+DROP TABLE IF EXISTS `blockchain_batches`;
+CREATE TABLE `blockchain_batches` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `batch_id` VARCHAR(100) NOT NULL UNIQUE,
+  `delivery_id` INT UNSIGNED NOT NULL,
+  `device_id` VARCHAR(50) NOT NULL,
+  `start_sequence` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  `end_sequence` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  `record_count` INT UNSIGNED NOT NULL DEFAULT 1,
+  `start_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `end_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `merkle_root` VARCHAR(64) NOT NULL,
+  `blockchain_tx_id` VARCHAR(128) NOT NULL,
+  `block_number` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  `blockchain_status` ENUM('PENDING', 'ANCHORED', 'VERIFIED', 'TAMPERED', 'FAILED') NOT NULL DEFAULT 'ANCHORED',
+  `batch_type` ENUM('PERIODIC_HOURLY', 'BATCH_SIZE_THRESHOLD', 'CRITICAL_EVENT', 'MANUAL_TRIGGER') NOT NULL DEFAULT 'PERIODIC_HOURLY',
+  `tamper_event_type` VARCHAR(100) NULL DEFAULT NULL,
+  `metadata_json` JSON DEFAULT NULL,
+  `verified_at` TIMESTAMP NULL DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_bb_delivery` (`delivery_id`),
+  INDEX `idx_bb_batch_id` (`batch_id`),
+  INDEX `idx_bb_tx_id` (`blockchain_tx_id`),
+  INDEX `idx_bb_root` (`merkle_root`),
+  INDEX `idx_bb_status` (`blockchain_status`),
+  CONSTRAINT `fk_bb_delivery` FOREIGN KEY (`delivery_id`) REFERENCES `deliveries` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+-- 12. Table: blockchain_verifications
+-- Audit trail of batch and delivery verification runs
+-- --------------------------------------------------------
+DROP TABLE IF EXISTS `blockchain_verifications`;
+CREATE TABLE `blockchain_verifications` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `batch_id` VARCHAR(100) NOT NULL,
+  `delivery_id` INT UNSIGNED NOT NULL,
+  `status` ENUM('VALID', 'TAMPERED', 'ERROR') NOT NULL,
+  `calculated_merkle_root` VARCHAR(64) NOT NULL,
+  `blockchain_merkle_root` VARCHAR(64) NOT NULL,
+  `hash_chain_valid` TINYINT(1) NOT NULL DEFAULT 1,
+  `tampered_record_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `details_json` JSON DEFAULT NULL,
+  `verified_by` VARCHAR(100) NOT NULL DEFAULT 'SYSTEM_AUDITOR',
+  `verified_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_bv_batch` (`batch_id`),
+  INDEX `idx_bv_delivery` (`delivery_id`),
+  INDEX `idx_bv_status` (`status`),
+  INDEX `idx_bv_verified_at` (`verified_at`),
+  CONSTRAINT `fk_bv_delivery` FOREIGN KEY (`delivery_id`) REFERENCES `deliveries` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+-- 13. Table: system_settings
 -- System-wide configurable thresholds, cooldowns, and ML parameters
 -- --------------------------------------------------------
 DROP TABLE IF EXISTS `system_settings`;

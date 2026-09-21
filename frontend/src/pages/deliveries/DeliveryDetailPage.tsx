@@ -19,7 +19,9 @@ import { locationsApi } from '../../api/locations';
 import { DriverLocation } from '../../types';
 import { formatNumber, formatDate, formatTravelTime } from '../../utils/formatters';
 import { RouteAnalyzeResponse } from '../../api/routeApi';
+import { blockchainApi } from '../../api/blockchain';
 import { LiveStatusBadge } from '../../components/common/LiveStatusBadge';
+import { BlockchainBatch, BatchVerificationResult } from '../../types';
 import {
   ArrowLeft,
   Thermometer,
@@ -38,7 +40,14 @@ import {
   Radio,
   Share2,
   Navigation,
-  Route
+  Route,
+  ShieldCheck,
+  ShieldAlert,
+  Layers,
+  Lock,
+  Check,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 
 export const DeliveryDetailPage: React.FC = () => {
@@ -48,6 +57,12 @@ export const DeliveryDetailPage: React.FC = () => {
   const { user } = useAuth();
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [routeData, setRouteData] = useState<RouteAnalyzeResponse | null>(null);
+
+  // Blockchain integrity state
+  const [blockchainBatches, setBlockchainBatches] = useState<BlockchainBatch[]>([]);
+  const [verificationResult, setVerificationResult] = useState<BatchVerificationResult | null>(null);
+  const [isVerifyingBlockchain, setIsVerifyingBlockchain] = useState<boolean>(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
   const { delivery, loading: loadingDelivery, error: deliveryError, accept, reject, start, complete, refresh } =
     useDelivery(deliveryId);
@@ -110,6 +125,48 @@ export const DeliveryDetailPage: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [delivery, latestSensor]);
+
+  useEffect(() => {
+    if (!deliveryId) return;
+    const fetchBatches = async () => {
+      try {
+        const res = await blockchainApi.getBatches({ delivery_id: deliveryId });
+        setBlockchainBatches(res.batches);
+      } catch (err) {
+        console.warn('Failed to load blockchain proofs for delivery', err);
+      }
+    };
+    fetchBatches();
+  }, [deliveryId]);
+
+  const handleVerifyDeliveryBlockchain = async () => {
+    if (!deliveryId) return;
+    try {
+      setIsVerifyingBlockchain(true);
+      const res = await blockchainApi.verifyDelivery(deliveryId);
+      if (res.batchResults && res.batchResults.length > 0) {
+        setVerificationResult(res.batchResults[0]);
+      }
+      setBlockchainBatches((prev) =>
+        prev.map((b) => ({ ...b, blockchain_status: res.allValid ? 'VERIFIED' : 'TAMPERED' }))
+      );
+    } catch (err) {
+      console.warn('Blockchain verification failed', err);
+    } finally {
+      setIsVerifyingBlockchain(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(text);
+    setTimeout(() => setCopiedText(null), 2000);
+  };
+
+  const truncate = (str: string, len: number = 8) => {
+    if (!str || str.length <= len * 2) return str;
+    return `${str.substring(0, len)}...${str.substring(str.length - len)}`;
+  };
 
   if (loadingDelivery) {
     return (
@@ -507,6 +564,80 @@ export const DeliveryDetailPage: React.FC = () => {
                       {delivery.device_id ? `#${delivery.device_id}` : 'Auto-paired with Driver'}
                     </span>
                   </div>
+                </div>
+
+                {/* Blockchain Proof & Data Integrity Card */}
+                <div className="p-4 rounded-xl bg-white border border-slate-200 text-slate-800 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" /> Blockchain Integrity:
+                    </span>
+                    <span className="text-[10px] uppercase font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Hyperledger Fabric
+                    </span>
+                  </div>
+
+                  {blockchainBatches.length > 0 ? (
+                    <div className="space-y-2 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Status:</span>
+                        <span className="font-bold text-emerald-600 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          {blockchainBatches[0].blockchain_status || 'ANCHORED'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Merkle Root:</span>
+                        <div className="flex items-center gap-1 font-mono text-[10px] text-slate-800">
+                          <span className="font-semibold">{truncate(blockchainBatches[0].merkle_root, 6)}</span>
+                          <button
+                            onClick={() => copyToClipboard(blockchainBatches[0].merkle_root)}
+                            className="p-0.5 text-slate-400 hover:text-slate-700"
+                          >
+                            {copiedText === blockchainBatches[0].merkle_root ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Tx ID:</span>
+                        <span className="font-mono text-slate-700 text-[10px]">
+                          {truncate(blockchainBatches[0].blockchain_tx_id, 6)} (Block #{blockchainBatches[0].block_number})
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={handleVerifyDeliveryBlockchain}
+                        disabled={isVerifyingBlockchain}
+                        className="w-full mt-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-2xs"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>{isVerifyingBlockchain ? 'Auditing On-Chain Proof...' : 'Verify Cryptographic Proof'}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 space-y-2">
+                      <p>Pending hourly Merkle-root batch anchoring on Hyperledger Fabric.</p>
+                      <button
+                        onClick={async () => {
+                          await blockchainApi.anchorBatch(deliveryId);
+                          const res = await blockchainApi.getBatches({ delivery_id: deliveryId });
+                          setBlockchainBatches(res.batches);
+                        }}
+                        className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition-colors border border-slate-200"
+                      >
+                        Anchor Proof Now
+                      </button>
+                    </div>
+                  )}
+
+                  {verificationResult && (
+                    <div className={`p-2.5 rounded-lg text-[10px] font-mono border ${verificationResult.verified ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                      <p className="font-sans font-bold">{verificationResult.verified ? '✓ Ledger Proof Matched (100% Valid)' : '⚠ Discrepancy Detected'}</p>
+                      <p className="truncate mt-0.5">Root: {verificationResult.blockchainRoot}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

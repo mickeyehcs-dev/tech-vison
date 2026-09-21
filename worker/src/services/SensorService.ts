@@ -2,6 +2,8 @@ import { SensorRepository } from '../db/repositories/SensorRepository';
 import { DeliveryRepository } from '../db/repositories/DeliveryRepository';
 import { PredictionRepository } from '../db/repositories/PredictionRepository';
 import { LocationRepository } from '../db/repositories/LocationRepository';
+import { BlockchainBatchService } from './blockchain/BlockchainBatchService';
+import { computeSensorRecordHash, GENESIS_PREVIOUS_HASH } from './blockchain/MerkleTree';
 import { SecurityService } from './SecurityService';
 import { NotificationService } from './NotificationService';
 import { RiskService } from './RiskService';
@@ -160,6 +162,7 @@ export class SensorService {
       storage_hours?: number;
       storage_days?: number;
       spoil_in?: number;
+      device_recorded_at?: string;
     },
     user: { id: number; email: string },
     env?: EnvBindings
@@ -268,11 +271,36 @@ export class SensorService {
       spoil_in: params.spoil_in
     }, env);
 
-    // Record in sensor_logs
+    // 8. Cryptographic Hash Chain Computation
+    const latestPriorLog = await SensorRepository.getLatestLogForHashChain(delivery.id, env);
+    const sequenceNumber = latestPriorLog ? (latestPriorLog.sequence_number || 0) + 1 : 1;
+    const previousHash = latestPriorLog?.record_hash || GENESIS_PREVIOUS_HASH;
+    const recordedTimestamp = params.device_recorded_at || new Date().toISOString();
+
+    const recordHash = await computeSensorRecordHash(
+      {
+        delivery_id: delivery.id,
+        sensor_module_id: sensorId,
+        sequence_number: sequenceNumber,
+        temperature: temp,
+        humidity: hum,
+        methane: meth,
+        co2: co2,
+        storage_hours: storageHours,
+        storage_days: storageDays,
+        score: evalResult.score,
+        status: evalResult.status,
+        device_recorded_at: recordedTimestamp
+      },
+      previousHash
+    );
+
+    // Record in sensor_logs with cryptographic hash chain
     const logId = await SensorRepository.logTelemetry(
       {
         delivery_id: delivery.id,
         sensor_module_id: sensorId,
+        sequence_number: sequenceNumber,
         temperature: temp,
         humidity: hum,
         methane: meth,
@@ -283,7 +311,9 @@ export class SensorService {
         status: evalResult.status,
         risk_level: evalResult.risk_level,
         spoil_in: evalResult.spoil_in,
-        device_recorded_at: new Date().toISOString()
+        record_hash: recordHash,
+        previous_hash: previousHash,
+        device_recorded_at: recordedTimestamp
       },
       env
     );
@@ -332,6 +362,22 @@ export class SensorService {
       }
     }
 
+    // Adaptive Evidence Window: If critical anomaly or batch size threshold reached, trigger blockchain anchoring in background
+    if (evalResult.risk_level === 'CRITICAL' || temp > 15.0 || meth > 0.05 || co2 > 1000) {
+      BlockchainBatchService.triggerEmergencyTamperAnchor(
+        delivery.id,
+        `CRITICAL_ANOMALY_${evalResult.risk_level}`,
+        { temp, hum, meth, co2, score: evalResult.score, violations: evalResult.violations },
+        env
+      ).catch((err) => console.warn('[Blockchain Emergency Anchor Warning]:', err.message));
+    } else if (sequenceNumber % 5 === 0) {
+      BlockchainBatchService.anchorPendingRecords(
+        delivery.id,
+        { batchType: 'PERIODIC_HOURLY', minRecords: 5 },
+        env
+      ).catch((err) => console.warn('[Blockchain Periodic Anchor Warning]:', err.message));
+    }
+
     return {
       logId,
       riskLevel: evalResult.risk_level,
@@ -361,7 +407,7 @@ export class SensorService {
       device_recorded_at?: string;
     },
     env?: EnvBindings
-  ): Promise<{ logId: number; riskLevel: string; score: number; spoilIn: number; deliveryId: number | null; status: string; violations: string[] }> {
+  ): Promise<{ logId: number; sequenceNumber?: number; recordHash?: string; previousHash?: string; riskLevel: string; score: number; spoilIn: number; deliveryId: number | null; status: string; violations: string[] }> {
     // 1. Authenticate sensor module (or resolve active sensor dynamically)
     let sensor = await SensorRepository.findByDeviceId(deviceId, env);
     if (!sensor || !sensor.is_active || sensor.status === 'removed') {
@@ -482,11 +528,35 @@ export class SensorService {
       spoil_in: telemetry.spoil_in
     }, env);
 
-    // 8. Record in sensor_logs
+    // 8. Cryptographic Hash Chain Computation
+    const latestPriorLog = await SensorRepository.getLatestLogForHashChain(activeDelivery.id, env);
+    const sequenceNumber = latestPriorLog ? (latestPriorLog.sequence_number || 0) + 1 : 1;
+    const previousHash = latestPriorLog?.record_hash || GENESIS_PREVIOUS_HASH;
+
+    const recordHash = await computeSensorRecordHash(
+      {
+        delivery_id: activeDelivery.id,
+        sensor_module_id: sensor.id,
+        sequence_number: sequenceNumber,
+        temperature: temp,
+        humidity: hum,
+        methane: meth,
+        co2: co2,
+        storage_hours: storageHours,
+        storage_days: storageDays,
+        score: evalResult.score,
+        status: evalResult.status,
+        device_recorded_at: telemetry.device_recorded_at || null
+      },
+      previousHash
+    );
+
+    // Record in sensor_logs with cryptographic hash chain
     const logId = await SensorRepository.logTelemetry(
       {
         delivery_id: activeDelivery.id,
         sensor_module_id: sensor.id,
+        sequence_number: sequenceNumber,
         temperature: temp,
         humidity: hum,
         methane: meth,
@@ -497,6 +567,8 @@ export class SensorService {
         status: evalResult.status,
         risk_level: evalResult.risk_level,
         spoil_in: evalResult.spoil_in,
+        record_hash: recordHash,
+        previous_hash: previousHash,
         device_recorded_at: telemetry.device_recorded_at || null
       },
       env
@@ -549,8 +621,27 @@ export class SensorService {
       }
     }
 
+    // Adaptive Evidence Window: If critical anomaly or batch threshold reached, trigger blockchain anchoring in background
+    if (evalResult.risk_level === 'CRITICAL' || temp > 15.0 || meth > 0.05 || co2 > 1000) {
+      BlockchainBatchService.triggerEmergencyTamperAnchor(
+        activeDelivery.id,
+        `CRITICAL_ANOMALY_${evalResult.risk_level}`,
+        { temp, hum, meth, co2, score: evalResult.score, violations: evalResult.violations },
+        env
+      ).catch((err) => console.warn('[Blockchain Emergency Anchor Warning]:', err.message));
+    } else if (sequenceNumber % 5 === 0) {
+      BlockchainBatchService.anchorPendingRecords(
+        activeDelivery.id,
+        { batchType: 'PERIODIC_HOURLY', minRecords: 5 },
+        env
+      ).catch((err) => console.warn('[Blockchain Periodic Anchor Warning]:', err.message));
+    }
+
     return {
       logId,
+      sequenceNumber,
+      recordHash,
+      previousHash,
       riskLevel: evalResult.risk_level,
       score: evalResult.score,
       spoilIn: evalResult.spoil_in,

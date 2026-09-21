@@ -109,6 +109,9 @@ const handleSensorDataIngest = async (c: any) => {
     return successResponse(c, {
       message: 'Telemetry ingested successfully',
       logId: result.logId,
+      sequence_number: result.sequenceNumber,
+      record_hash: result.recordHash,
+      previous_hash: result.previousHash,
       riskLevel: result.riskLevel,
       score: result.score,
       status: result.status,

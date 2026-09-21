@@ -30,6 +30,7 @@ import { DriverActiveDelivery } from './pages/driver/DriverActiveDelivery';
 import { DeliveryDetailPage } from './pages/deliveries/DeliveryDetailPage';
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
+import { BlockchainAuditPage } from './pages/blockchain/BlockchainAuditPage';
 import { PublicTrackPage } from './pages/PublicTrackPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -72,6 +73,14 @@ export const App: React.FC = () => {
               <Route path="/" element={<RootRedirect />} />
 
               {/* Common Authenticated Routes */}
+              <Route
+                path="/blockchain"
+                element={
+                  <RoleGuard>
+                    <BlockchainAuditPage />
+                  </RoleGuard>
+                }
+              />
               <Route
                 path="/deliveries/:id"
                 element={

@@ -10,6 +10,7 @@ import { locationRoutes } from './routes/locations';
 import { adminRoutes } from './routes/admin';
 import { publicTrackingRoutes } from './routes/publicTracking';
 import { routeRiskRoutes } from './routes/routeRisk';
+import { blockchainRoutes } from './routes/blockchain';
 import { errorHandler } from './middleware/errorHandler';
 import { AppEnv } from './types';
 
@@ -59,6 +60,7 @@ app.route('/api/v1/notifications', notificationRoutes);
 app.route('/api/v1/security', securityRoutes);
 app.route('/api/v1/locations', locationRoutes);
 app.route('/api/v1/admin', adminRoutes);
+app.route('/api/v1/blockchain', blockchainRoutes);
 
 // Fallback 404 handler
 app.notFound((c) => {

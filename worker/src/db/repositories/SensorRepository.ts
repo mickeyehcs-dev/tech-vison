@@ -236,6 +236,7 @@ export class SensorRepository {
     log: {
       delivery_id: number;
       sensor_module_id: number;
+      sequence_number?: number;
       temperature: number;
       humidity: number;
       methane: number;
@@ -246,6 +247,8 @@ export class SensorRepository {
       status: string;
       risk_level: string;
       spoil_in?: number | null;
+      record_hash?: string | null;
+      previous_hash?: string | null;
       device_recorded_at?: string | null;
     },
     env?: EnvBindings
@@ -257,13 +260,16 @@ export class SensorRepository {
       ? log.storage_days 
       : (hours / 24);
 
+    const seq = log.sequence_number || 1;
+
     const result = await executeQuery<ResultSetHeader>(
       `INSERT INTO sensor_logs 
-       (delivery_id, sensor_module_id, temperature, humidity, methane, co2, storage_hours, storage_days, score, status, risk_level, spoil_in, device_recorded_at, recorded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (delivery_id, sensor_module_id, sequence_number, temperature, humidity, methane, co2, storage_hours, storage_days, score, status, risk_level, spoil_in, record_hash, previous_hash, device_recorded_at, recorded_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         log.delivery_id,
         log.sensor_module_id,
+        seq,
         log.temperature,
         log.humidity,
         log.methane,
@@ -274,6 +280,8 @@ export class SensorRepository {
         log.status,
         log.risk_level,
         log.spoil_in !== undefined ? log.spoil_in : null,
+        log.record_hash || null,
+        log.previous_hash || null,
         formatMySqlDateTime(log.device_recorded_at)
       ],
       env
@@ -281,9 +289,107 @@ export class SensorRepository {
     return result.insertId;
   }
 
+  static async getLatestLogForHashChain(deliveryId: number, env?: EnvBindings): Promise<SensorLog | null> {
+    const rows = await executeQuery<RowDataPacket[]>(
+      `SELECT sl.*, sm.device_id 
+       FROM sensor_logs sl
+       LEFT JOIN sensor_modules sm ON sl.sensor_module_id = sm.id
+       WHERE sl.delivery_id = ? 
+       ORDER BY sl.sequence_number DESC, sl.id DESC 
+       LIMIT 1`,
+      [deliveryId],
+      env
+    );
+    return (rows[0] as SensorLog) || null;
+  }
+
+  static async getUnanchoredLogs(deliveryId: number, afterSequence: number = 0, env?: EnvBindings): Promise<SensorLog[]> {
+    const rows = await executeQuery<RowDataPacket[]>(
+      `SELECT sl.*, sm.device_id, d.delivery_code, d.food_name
+       FROM sensor_logs sl
+       LEFT JOIN sensor_modules sm ON sl.sensor_module_id = sm.id
+       LEFT JOIN deliveries d ON sl.delivery_id = d.id
+       WHERE sl.delivery_id = ? AND sl.sequence_number > ?
+       ORDER BY sl.sequence_number ASC`,
+      [deliveryId, afterSequence],
+      env
+    );
+    return rows as SensorLog[];
+  }
+
+  static async getLogsBySequenceRange(
+    deliveryId: number,
+    startSeq: number,
+    endSeq: number,
+    env?: EnvBindings
+  ): Promise<SensorLog[]> {
+    const rows = await executeQuery<RowDataPacket[]>(
+      `SELECT sl.*, sm.device_id, d.delivery_code, d.food_name
+       FROM sensor_logs sl
+       LEFT JOIN sensor_modules sm ON sl.sensor_module_id = sm.id
+       LEFT JOIN deliveries d ON sl.delivery_id = d.id
+       WHERE sl.delivery_id = ? AND sl.sequence_number BETWEEN ? AND ?
+       ORDER BY sl.sequence_number ASC`,
+      [deliveryId, startSeq, endSeq],
+      env
+    );
+    return rows as SensorLog[];
+  }
+
+  static async updateSensorLog(
+    id: number,
+    updateData: {
+      temperature?: number;
+      humidity?: number;
+      methane?: number;
+      co2?: number;
+      record_hash?: string;
+    },
+    env?: EnvBindings
+  ): Promise<boolean> {
+    const setClauses: string[] = [];
+    const values: any[] = [];
+
+    if (updateData.temperature !== undefined) {
+      setClauses.push('temperature = ?');
+      values.push(updateData.temperature);
+    }
+    if (updateData.humidity !== undefined) {
+      setClauses.push('humidity = ?');
+      values.push(updateData.humidity);
+    }
+    if (updateData.methane !== undefined) {
+      setClauses.push('methane = ?');
+      values.push(updateData.methane);
+    }
+    if (updateData.co2 !== undefined) {
+      setClauses.push('co2 = ?');
+      values.push(updateData.co2);
+    }
+    if (updateData.record_hash !== undefined) {
+      setClauses.push('record_hash = ?');
+      values.push(updateData.record_hash);
+    }
+
+    if (setClauses.length === 0) return true;
+
+    values.push(id);
+    const result = await executeQuery<ResultSetHeader>(
+      `UPDATE sensor_logs SET ${setClauses.join(', ')} WHERE id = ?`,
+      values,
+      env
+    );
+    return result.affectedRows > 0;
+  }
+
   static async getLatestLogByDelivery(deliveryId: number, env?: EnvBindings): Promise<SensorLog | null> {
     const rows = await executeQuery<RowDataPacket[]>(
-      `SELECT * FROM sensor_logs WHERE delivery_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+      `SELECT sl.*, sm.device_id 
+       FROM sensor_logs sl
+       LEFT JOIN sensor_modules sm ON sl.sensor_module_id = sm.id
+       WHERE sl.delivery_id = ? 
+       ORDER BY sl.recorded_at DESC, sl.id DESC 
+       LIMIT 1`,
       [deliveryId],
       env
     );
@@ -296,7 +402,12 @@ export class SensorRepository {
     env?: EnvBindings
   ): Promise<SensorLog[]> {
     const rows = await executeQuery<RowDataPacket[]>(
-      `SELECT * FROM sensor_logs WHERE delivery_id = ? ORDER BY recorded_at ASC LIMIT ?`,
+      `SELECT sl.*, sm.device_id 
+       FROM sensor_logs sl
+       LEFT JOIN sensor_modules sm ON sl.sensor_module_id = sm.id
+       WHERE sl.delivery_id = ? 
+       ORDER BY sl.sequence_number ASC, sl.recorded_at ASC 
+       LIMIT ?`,
       [deliveryId, limit],
       env
     );
@@ -310,8 +421,8 @@ export class SensorRepository {
     const limit = params.limit || 5000;
     let sql = `
       SELECT sl.id, sl.delivery_id, d.delivery_code, d.food_name, sm.device_id,
-             sl.temperature, sl.humidity, sl.methane, sl.co2, sl.storage_days,
-             sl.score, sl.status, sl.risk_level, sl.spoil_in, sl.recorded_at
+             sl.sequence_number, sl.temperature, sl.humidity, sl.methane, sl.co2, sl.storage_days,
+             sl.score, sl.status, sl.risk_level, sl.spoil_in, sl.record_hash, sl.previous_hash, sl.recorded_at
       FROM sensor_logs sl
       JOIN deliveries d ON sl.delivery_id = d.id
       JOIN sensor_modules sm ON sl.sensor_module_id = sm.id
@@ -321,7 +432,7 @@ export class SensorRepository {
       sql += ' WHERE sl.delivery_id = ?';
       values.push(params.deliveryId);
     }
-    sql += ' ORDER BY sl.recorded_at DESC LIMIT ?';
+    sql += ' ORDER BY sl.sequence_number DESC LIMIT ?';
     values.push(limit);
 
     const rows = await executeQuery<RowDataPacket[]>(sql, values, env);

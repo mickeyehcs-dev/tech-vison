@@ -32,6 +32,8 @@ export interface MemoryStore {
   model_predictions: any[];
   notifications: any[];
   security_logs: any[];
+  blockchain_batches: any[];
+  blockchain_verifications: any[];
 }
 
 export const memoryStore: MemoryStore = {
@@ -228,6 +230,7 @@ export const memoryStore: MemoryStore = {
       id: 1,
       delivery_id: 1,
       sensor_module_id: 1,
+      sequence_number: 1,
       temperature: 4.8,
       humidity: 68.5,
       methane: 0.012,
@@ -236,13 +239,18 @@ export const memoryStore: MemoryStore = {
       storage_days: 0.31,
       score: 14,
       status: 'Safe',
+      risk_level: 'LOW',
       spoil_in: 72.0,
+      record_hash: '90a8870fb8de7fa0120150d0a793c2c7974011ef92955f11116fa05d6e2746eb',
+      previous_hash: '0000000000000000000000000000000000000000000000000000000000000000',
+      device_recorded_at: new Date().toISOString(),
       recorded_at: new Date().toISOString()
     },
     {
       id: 2,
       delivery_id: 2,
       sensor_module_id: 2,
+      sequence_number: 1,
       temperature: 18.5,
       humidity: 82.0,
       methane: 0.025,
@@ -251,7 +259,11 @@ export const memoryStore: MemoryStore = {
       storage_days: 0.24,
       score: 38,
       status: 'Moderate Risk',
+      risk_level: 'MEDIUM',
       spoil_in: 36.0,
+      record_hash: 'b1c8870fb8de7fa0120150d0a793c2c7974011ef92955f11116fa05d6e2746f0',
+      previous_hash: '0000000000000000000000000000000000000000000000000000000000000000',
+      device_recorded_at: new Date().toISOString(),
       recorded_at: new Date().toISOString()
     }
   ],
@@ -355,6 +367,63 @@ export const memoryStore: MemoryStore = {
       details: null,
       created_at: new Date(Date.now() - 4 * 3600 * 1000).toISOString()
     }
+  ],
+  blockchain_batches: [
+    {
+      id: 1,
+      batch_id: 'BATCH-DEL-2026-8841-001',
+      delivery_id: 1,
+      device_id: 'SFM-7C81A19D',
+      start_sequence: 1,
+      end_sequence: 1,
+      record_count: 1,
+      start_time: new Date(Date.now() - 7.5 * 3600 * 1000).toISOString(),
+      end_time: new Date(Date.now() - 6.5 * 3600 * 1000).toISOString(),
+      merkle_root: '9e2b17f54c86df5b682312b98e82110c71a3962d35c8b211f18546bdfc1452e8',
+      blockchain_tx_id: 'tx_fab_8f72c91a03e14df8b64e5209ac741bde4410291e',
+      block_number: 142,
+      blockchain_status: 'ANCHORED',
+      batch_type: 'PERIODIC_HOURLY',
+      tamper_event_type: null,
+      metadata_json: { notes: 'Hourly batch proof anchored to Hyperledger Fabric channel coldchain-channel' },
+      verified_at: new Date().toISOString(),
+      created_at: new Date(Date.now() - 6.5 * 3600 * 1000).toISOString()
+    },
+    {
+      id: 2,
+      batch_id: 'BATCH-DEL-2026-9932-001',
+      delivery_id: 2,
+      device_id: 'SFM-99214F8A',
+      start_sequence: 1,
+      end_sequence: 1,
+      record_count: 1,
+      start_time: new Date(Date.now() - 5.75 * 3600 * 1000).toISOString(),
+      end_time: new Date(Date.now() - 4.75 * 3600 * 1000).toISOString(),
+      merkle_root: '3a884f18c2d589e9bbd62e171092a4e21a719c8f00b2184e1b854e7d9b9211c4',
+      blockchain_tx_id: 'tx_fab_44a9018e6cb0f41295b9d31ecf01487bb0811e54',
+      block_number: 143,
+      blockchain_status: 'ANCHORED',
+      batch_type: 'CRITICAL_EVENT',
+      tamper_event_type: 'ELEVATED_RESPIRATION_GAS',
+      metadata_json: { notes: 'Adaptive evidence proof triggered on respiration anomaly' },
+      verified_at: new Date().toISOString(),
+      created_at: new Date(Date.now() - 4.75 * 3600 * 1000).toISOString()
+    }
+  ],
+  blockchain_verifications: [
+    {
+      id: 1,
+      batch_id: 'BATCH-DEL-2026-8841-001',
+      delivery_id: 1,
+      status: 'VALID',
+      calculated_merkle_root: '9e2b17f54c86df5b682312b98e82110c71a3962d35c8b211f18546bdfc1452e8',
+      blockchain_merkle_root: '9e2b17f54c86df5b682312b98e82110c71a3962d35c8b211f18546bdfc1452e8',
+      hash_chain_valid: 1,
+      tampered_record_count: 0,
+      details_json: { verifiedRecords: 1, match: true },
+      verified_by: 'SYSTEM_AUDITOR',
+      verified_at: new Date().toISOString()
+    }
   ]
 };
 
@@ -421,6 +490,69 @@ async function testAndInitMySql(host: string, port: number, user: string, passwo
           }
           console.log('[DB] MySQL Schema initialized successfully in XAMPP!');
         }
+      } else {
+        // Ensure blockchain tables and columns exist even if users table was already created
+        try {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS \`blockchain_batches\` (
+              \`id\` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              \`batch_id\` VARCHAR(100) NOT NULL UNIQUE,
+              \`delivery_id\` INT UNSIGNED NOT NULL,
+              \`device_id\` VARCHAR(50) NOT NULL,
+              \`start_sequence\` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+              \`end_sequence\` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+              \`record_count\` INT UNSIGNED NOT NULL DEFAULT 1,
+              \`start_time\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              \`end_time\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              \`merkle_root\` VARCHAR(64) NOT NULL,
+              \`blockchain_tx_id\` VARCHAR(128) NOT NULL,
+              \`block_number\` BIGINT UNSIGNED NOT NULL DEFAULT 1,
+              \`blockchain_status\` ENUM('PENDING', 'ANCHORED', 'VERIFIED', 'TAMPERED', 'FAILED') NOT NULL DEFAULT 'ANCHORED',
+              \`batch_type\` ENUM('PERIODIC_HOURLY', 'BATCH_SIZE_THRESHOLD', 'CRITICAL_EVENT', 'MANUAL_TRIGGER') NOT NULL DEFAULT 'PERIODIC_HOURLY',
+              \`tamper_event_type\` VARCHAR(100) NULL DEFAULT NULL,
+              \`metadata_json\` JSON DEFAULT NULL,
+              \`verified_at\` TIMESTAMP NULL DEFAULT NULL,
+              \`created_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX \`idx_bb_delivery\` (\`delivery_id\`),
+              INDEX \`idx_bb_batch_id\` (\`batch_id\`),
+              INDEX \`idx_bb_tx_id\` (\`blockchain_tx_id\`),
+              INDEX \`idx_bb_root\` (\`merkle_root\`),
+              INDEX \`idx_bb_status\` (\`blockchain_status\`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+          `);
+        } catch (_) {}
+
+        try {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS \`blockchain_verifications\` (
+              \`id\` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+              \`batch_id\` VARCHAR(100) NOT NULL,
+              \`delivery_id\` INT UNSIGNED NOT NULL,
+              \`status\` ENUM('VALID', 'TAMPERED', 'ERROR') NOT NULL,
+              \`calculated_merkle_root\` VARCHAR(64) NOT NULL,
+              \`blockchain_merkle_root\` VARCHAR(64) NOT NULL,
+              \`hash_chain_valid\` TINYINT(1) NOT NULL DEFAULT 1,
+              \`tampered_record_count\` INT UNSIGNED NOT NULL DEFAULT 0,
+              \`details_json\` JSON DEFAULT NULL,
+              \`verified_by\` VARCHAR(100) NOT NULL DEFAULT 'SYSTEM_AUDITOR',
+              \`verified_at\` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX \`idx_bv_batch\` (\`batch_id\`),
+              INDEX \`idx_bv_delivery\` (\`delivery_id\`),
+              INDEX \`idx_bv_status\` (\`status\`),
+              INDEX \`idx_bv_verified_at\` (\`verified_at\`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+          `);
+        } catch (_) {}
+
+        try {
+          await pool.query("ALTER TABLE `sensor_logs` ADD COLUMN `sequence_number` BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER `sensor_module_id`");
+        } catch (_) {}
+        try {
+          await pool.query("ALTER TABLE `sensor_logs` ADD COLUMN `record_hash` VARCHAR(64) NULL DEFAULT NULL AFTER `spoil_in`");
+        } catch (_) {}
+        try {
+          await pool.query("ALTER TABLE `sensor_logs` ADD COLUMN `previous_hash` VARCHAR(64) NULL DEFAULT NULL AFTER `record_hash`");
+        } catch (_) {}
       }
       isMySqlActive = true;
       console.log(`[DB] Connected to XAMPP MySQL database \`${database}\``);
@@ -756,31 +888,113 @@ function executeInMemoryQuery(sql: string, params: any[] = []): any {
 
   // 9. Sensor Logs & Predictions
   if (lower.startsWith('select') && lower.includes('from sensor_logs')) {
-    if (lower.includes('where delivery_id = ?')) {
+    let list = [...memoryStore.sensor_logs];
+
+    // Join deliveries & sensor_modules if needed
+    list = list.map((sl) => {
+      const del = memoryStore.deliveries.find((d) => d.id === sl.delivery_id);
+      const sm = memoryStore.sensor_modules.find((s) => s.id === sl.sensor_module_id);
+      return {
+        ...sl,
+        sequence_number: sl.sequence_number || 1,
+        delivery_code: del ? del.delivery_code : `DEL-${sl.delivery_id}`,
+        food_name: del ? del.food_name : 'Cold Cargo',
+        device_id: sm ? sm.device_id : `SFM-00${sl.sensor_module_id}`
+      };
+    });
+
+    if (lower.includes('where sl.delivery_id = ?') || lower.includes('where delivery_id = ?')) {
       const delId = parseInt(params[0], 10);
-      return memoryStore.sensor_logs.filter((sl) => sl.delivery_id === delId);
+      list = list.filter((sl) => sl.delivery_id === delId);
     }
-    return memoryStore.sensor_logs;
+
+    if (lower.includes('and sl.sequence_number > ?') || lower.includes('and sequence_number > ?')) {
+      const afterSeq = parseInt(params[1], 10);
+      list = list.filter((sl) => (sl.sequence_number || 0) > afterSeq);
+    }
+
+    if (lower.includes('where id = ?') || lower.includes('where sl.id = ?')) {
+      const id = parseInt(params[0], 10);
+      return list.filter((sl) => sl.id === id);
+    }
+
+    if (lower.includes('sequence_number between ? and ?')) {
+      const start = parseInt(params[params.length - 2], 10);
+      const end = parseInt(params[params.length - 1], 10);
+      list = list.filter((sl) => (sl.sequence_number || 1) >= start && (sl.sequence_number || 1) <= end);
+    }
+
+    if (lower.includes('order by')) {
+      if (lower.includes('sequence_number asc') || lower.includes('sl.sequence_number asc')) {
+        list.sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0) || a.id - b.id);
+      } else if (
+        lower.includes('sequence_number desc') ||
+        lower.includes('sl.sequence_number desc') ||
+        lower.includes('recorded_at desc') ||
+        lower.includes('sl.recorded_at desc') ||
+        lower.includes('sl.id desc')
+      ) {
+        list.sort((a, b) => (b.sequence_number || 0) - (a.sequence_number || 0) || b.id - a.id);
+      }
+    }
+
+    if (lower.includes('limit ?')) {
+      const limitVal = parseInt(params[params.length - 1], 10) || 100;
+      return list.slice(0, limitVal);
+    }
+
+    if (lower.includes('limit 1')) {
+      return list.slice(0, 1);
+    }
+
+    return list;
   }
 
   if (lower.startsWith('insert into sensor_logs')) {
     const newId = memoryStore.sensor_logs.length + 1;
-    memoryStore.sensor_logs.push({
+    // Handle both 16 parameter full insert (with hashes) and legacy
+    const logObj: any = {
       id: newId,
       delivery_id: params[0],
       sensor_module_id: params[1],
-      temperature: params[2],
-      humidity: params[3],
-      methane: params[4],
-      co2: params[5],
-      storage_hours: params[6],
-      storage_days: params[7],
-      score: params[8],
-      status: params[9],
-      spoil_in: params[10],
+      sequence_number: params[2] !== undefined ? params[2] : newId,
+      temperature: params[3] !== undefined ? params[3] : params[2],
+      humidity: params[4] !== undefined ? params[4] : params[3],
+      methane: params[5] !== undefined ? params[5] : params[4],
+      co2: params[6] !== undefined ? params[6] : params[5],
+      storage_hours: params[7] !== undefined ? params[7] : params[6],
+      storage_days: params[8] !== undefined ? params[8] : params[7],
+      score: params[9] !== undefined ? params[9] : params[8],
+      status: params[10] !== undefined ? params[10] : params[9],
+      risk_level: params[11] !== undefined ? params[11] : (params[10] || 'LOW'),
+      spoil_in: params[12] !== undefined ? params[12] : params[11],
+      record_hash: params[13] || null,
+      previous_hash: params[14] || null,
+      device_recorded_at: params[15] || new Date().toISOString(),
       recorded_at: new Date().toISOString()
-    });
+    };
+    memoryStore.sensor_logs.push(logObj);
     return { insertId: newId, affectedRows: 1 };
+  }
+
+  if (lower.startsWith('update sensor_logs')) {
+    const targetId = parseInt(params[params.length - 1], 10);
+    const sl = memoryStore.sensor_logs.find((s) => s.id === targetId);
+    if (sl) {
+      const setPart = lower.split('set')[1]?.split('where')[0] || '';
+      const assignments = setPart.split(',').map((s) => s.trim());
+      assignments.forEach((assign, index) => {
+        const val = params[index];
+        if (assign.startsWith('temperature')) sl.temperature = val;
+        else if (assign.startsWith('humidity')) sl.humidity = val;
+        else if (assign.startsWith('methane')) sl.methane = val;
+        else if (assign.startsWith('co2')) sl.co2 = val;
+        else if (assign.startsWith('record_hash')) sl.record_hash = val;
+        else if (assign.startsWith('previous_hash')) sl.previous_hash = val;
+      });
+      return { affectedRows: 1 };
+    }
+    return { affectedRows: 0 };
   }
 
   // 10. Notifications & Security Logs
@@ -843,6 +1057,126 @@ function executeInMemoryQuery(sql: string, params: any[] = []): any {
       recorded_at: new Date().toISOString()
     });
     return { insertId: newId, affectedRows: 1 };
+  }
+
+  // 12. Blockchain Batches
+  if (lower.startsWith('select') && lower.includes('from blockchain_batches')) {
+    let list = memoryStore.blockchain_batches.map((bb) => {
+      const del = memoryStore.deliveries.find((d) => d.id === bb.delivery_id);
+      const driver = del ? memoryStore.users.find((u) => u.id === del.driver_id) : null;
+      return {
+        ...bb,
+        delivery_code: del ? del.delivery_code : `DEL-${bb.delivery_id}`,
+        food_name: del ? del.food_name : 'Cold Transport Cargo',
+        driver_name: driver ? driver.full_name : null
+      };
+    });
+
+    if (lower.includes('where bb.batch_id = ?') || lower.includes('where batch_id = ?')) {
+      const bId = String(params[0] || '').trim();
+      const found = list.find((b) => b.batch_id === bId);
+      return found ? [found] : [];
+    }
+
+    if (lower.includes('where bb.delivery_id = ?') || lower.includes('where delivery_id = ?')) {
+      const dId = parseInt(params[0], 10);
+      list = list.filter((b) => b.delivery_id === dId);
+    }
+
+    if (lower.includes('count(*)')) {
+      return [{ count: list.length }];
+    }
+
+    if (lower.includes('order by created_at desc') || lower.includes('order by bb.created_at desc')) {
+      list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    return list;
+  }
+
+  if (lower.startsWith('insert into blockchain_batches')) {
+    const newId = memoryStore.blockchain_batches.length + 1;
+    const batchObj = {
+      id: newId,
+      batch_id: params[0],
+      delivery_id: params[1],
+      device_id: params[2],
+      start_sequence: params[3],
+      end_sequence: params[4],
+      record_count: params[5],
+      start_time: params[6] || new Date().toISOString(),
+      end_time: params[7] || new Date().toISOString(),
+      merkle_root: params[8],
+      blockchain_tx_id: params[9],
+      block_number: params[10] || 1,
+      blockchain_status: params[11] || 'ANCHORED',
+      batch_type: params[12] || 'PERIODIC_HOURLY',
+      tamper_event_type: params[13] || null,
+      metadata_json: params[14] || null,
+      verified_at: params[15] || null,
+      created_at: new Date().toISOString()
+    };
+    memoryStore.blockchain_batches.unshift(batchObj);
+    return { insertId: newId, affectedRows: 1 };
+  }
+
+  if (lower.startsWith('update blockchain_batches')) {
+    const batchId = params[params.length - 1];
+    const b = memoryStore.blockchain_batches.find((batch) => batch.batch_id === batchId || batch.id === parseInt(batchId, 10));
+    if (b) {
+      if (lower.includes('blockchain_status = ?')) {
+        b.blockchain_status = params[0];
+      }
+      if (lower.includes('verified_at = ?') || lower.includes('verified_at = now()')) {
+        b.verified_at = params[1] || new Date().toISOString();
+      }
+      return { affectedRows: 1 };
+    }
+    return { affectedRows: 0 };
+  }
+
+  // 13. Blockchain Verifications
+  if (lower.startsWith('select') && lower.includes('from blockchain_verifications')) {
+    if (lower.includes('where delivery_id = ?')) {
+      const dId = parseInt(params[0], 10);
+      return memoryStore.blockchain_verifications.filter((bv) => bv.delivery_id === dId);
+    }
+    if (lower.includes('where batch_id = ?')) {
+      const bId = String(params[0] || '').trim();
+      return memoryStore.blockchain_verifications.filter((bv) => bv.batch_id === bId);
+    }
+    return memoryStore.blockchain_verifications;
+  }
+
+  if (lower.startsWith('insert into blockchain_verifications')) {
+    const newId = memoryStore.blockchain_verifications.length + 1;
+    memoryStore.blockchain_verifications.unshift({
+      id: newId,
+      batch_id: params[0],
+      delivery_id: params[1],
+      status: params[2],
+      calculated_merkle_root: params[3],
+      blockchain_merkle_root: params[4],
+      hash_chain_valid: params[5] !== undefined ? params[5] : 1,
+      tampered_record_count: params[6] || 0,
+      details_json: params[7] || null,
+      verified_by: params[8] || 'SYSTEM_AUDITOR',
+      verified_at: new Date().toISOString()
+    });
+    return { insertId: newId, affectedRows: 1 };
+  }
+
+  // 14. System Settings
+  if (lower.startsWith('select') && lower.includes('from system_settings')) {
+    return [
+      { setting_key: 'temp_threshold_warning', setting_value: '10.0' },
+      { setting_key: 'temp_threshold_critical', setting_value: '15.0' },
+      { setting_key: 'humidity_threshold_warning', setting_value: '80.0' },
+      { setting_key: 'methane_threshold_critical', setting_value: '0.05' },
+      { setting_key: 'co2_threshold_critical', setting_value: '1000.0' },
+      { setting_key: 'sensor_offline_seconds', setting_value: '60' },
+      { setting_key: 'alert_cooldown_seconds', setting_value: '300' }
+    ];
   }
 
   return [];

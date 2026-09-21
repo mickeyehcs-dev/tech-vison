@@ -1,0 +1,51 @@
+{
+  "name": "coldchain-network",
+  "version": "1.0.0",
+  "client": {
+    "organization": "Org1",
+    "connection": {
+      "timeout": {
+        "peer": {
+          "endorser": "300"
+        },
+        "orderer": "300"
+      }
+    }
+  },
+  "channels": {
+    "coldchain-channel": {
+      "orderers": ["orderer.coldchain.com"],
+      "peers": {
+        "peer0.org1.coldchain.com": {
+          "endorsingPeer": true,
+          "chaincodeQuery": true,
+          "ledgerQuery": true,
+          "eventSource": true
+        }
+      }
+    }
+  },
+  "organizations": {
+    "Org1": {
+      "mspid": "Org1MSP",
+      "peers": ["peer0.org1.coldchain.com"],
+      "certificateAuthorities": ["ca-org1"]
+    }
+  },
+  "orderers": {
+    "orderer.coldchain.com": {
+      "url": "grpc://localhost:7050"
+    }
+  },
+  "peers": {
+    "peer0.org1.coldchain.com": {
+      "url": "grpc://localhost:7051"
+    }
+  },
+  "certificateAuthorities": {
+    "ca-org1": {
+      "url": "http://localhost:7054",
+      "caName": "ca-org1"
+    }
+  }
+}

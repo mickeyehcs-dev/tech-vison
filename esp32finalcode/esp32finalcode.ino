@@ -58,7 +58,7 @@ const char* password = "kkrkkrkkr";
 // ==========================================================
 
 const char* serverUrl =
-  "http://10.59.254.49:8787/api/v1/sensors/data";
+  "http://10.224.49.59:8787/api/v1/sensors/data";
 
 const char* deviceId = "SFM-936474A0";
 
@@ -966,4 +966,86 @@ void loop() {
 
   delay(1000);
 }
+
+
+// ==========================================================
+// HTTP TELEMETRY UPLOAD & HASH SHARING FUNCTION
+// ==========================================================
+
+// Monotonic sequence and hash tracking
+unsigned long currentSeq = 1;
+String currentPrevHash = "0000000000000000000000000000000000000000000000000000000000000000";
+
+void sendTelemetry(float temp, float hum, float methanePpm, float co2Ppm, float lat, float lon) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[HTTP] WiFi disconnected! Skipping upload.");
+    return;
+  }
+
+  HTTPClient http;
+  http.begin(serverUrl);
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-DEVICE-ID", deviceId);
+  http.addHeader("X-API-KEY", apiKey);
+
+  // Construct JSON payload using ArduinoJson
+  StaticJsonDocument<384> doc;
+  doc["temperature"]     = round(temp * 100.0) / 100.0;
+  doc["humidity"]        = round(hum * 100.0) / 100.0;
+  doc["methane_ppm"]     = round(methanePpm * 100.0) / 100.0;
+  doc["co2_ppm"]         = round(co2Ppm * 100.0) / 100.0;
+  doc["latitude"]        = lat;
+  doc["longitude"]       = lon;
+  doc["sequence_number"] = currentSeq;
+  doc["previous_hash"]   = currentPrevHash;
+
+  String requestBody;
+  serializeJson(doc, requestBody);
+
+  Serial.println();
+  Serial.print("[HTTP POST] ");
+  Serial.println(serverUrl);
+  Serial.print("[Payload] ");
+  Serial.println(requestBody);
+
+  int httpResponseCode = http.POST(requestBody);
+
+  if (httpResponseCode > 0) {
+    String response = http.getString();
+    Serial.printf("[HTTP] Success (Code %d)\n", httpResponseCode);
+
+    // Parse returned cryptographic hashes from backend
+    StaticJsonDocument<512> resDoc;
+    DeserializationError err = deserializeJson(resDoc, response);
+
+    if (!err && resDoc["success"]) {
+      const char* recordHash = resDoc["data"]["record_hash"];
+      const char* prevHash = resDoc["data"]["previous_hash"];
+      unsigned long seq = resDoc["data"]["sequence_number"];
+      const char* status = resDoc["data"]["status"];
+      float score = resDoc["data"]["score"];
+
+      Serial.println("-----------------------------------------------");
+      Serial.println("⛓️  BLOCKCHAIN INTEGRITY & HASH CHAIN SYNC");
+      Serial.printf("   Sequence Number: #%lu\n", seq);
+      Serial.printf("   Record Hash H_n: %s\n", recordHash ? recordHash : "N/A");
+      Serial.printf("   Prev Hash H_n-1: %s\n", prevHash ? prevHash : "N/A");
+      Serial.printf("   Spoilage Status: %s (Risk Score: %.1f)\n", status ? status : "OK", score);
+      Serial.println("-----------------------------------------------");
+
+      if (recordHash != nullptr) {
+        currentPrevHash = String(recordHash);
+        currentSeq = seq + 1;
+      }
+    } else {
+      Serial.print("[HTTP] Server Response: ");
+      Serial.println(response);
+    }
+  } else {
+    Serial.printf("[HTTP] Error sending POST: %s (Code %d)\n", http.errorToString(httpResponseCode).c_str(), httpResponseCode);
+  }
+
+  http.end();
+}
+
 

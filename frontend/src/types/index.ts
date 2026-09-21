@@ -149,3 +149,84 @@ export interface DashboardStats {
   availableSensors?: number;
   highRiskDeliveries?: number;
 }
+
+export type BlockchainBatchStatus = 'PENDING' | 'ANCHORED' | 'VERIFIED' | 'TAMPERED' | 'FAILED';
+export type BatchType = 'PERIODIC_HOURLY' | 'BATCH_SIZE_THRESHOLD' | 'CRITICAL_EVENT' | 'MANUAL_TRIGGER';
+
+export interface BlockchainBatch {
+  id: number;
+  batch_id: string;
+  delivery_id: number;
+  device_id: string;
+  start_sequence: number;
+  end_sequence: number;
+  record_count: number;
+  start_time: string;
+  end_time: string;
+  merkle_root: string;
+  blockchain_tx_id: string;
+  block_number: number;
+  blockchain_status: BlockchainBatchStatus;
+  batch_type: BatchType;
+  tamper_event_type?: string | null;
+  metadata_json?: any;
+  verified_at?: string | null;
+  created_at: string;
+  delivery_code?: string;
+  food_name?: string;
+  driver_name?: string;
+  onChainProof?: any;
+  verifications?: BlockchainVerification[];
+}
+
+export interface BlockchainVerification {
+  id: number;
+  batch_id: string;
+  delivery_id: number;
+  status: 'VALID' | 'TAMPERED' | 'ERROR';
+  calculated_merkle_root: string;
+  blockchain_merkle_root: string;
+  hash_chain_valid: number;
+  tampered_record_count: number;
+  details_json?: any;
+  verified_by: string;
+  verified_at: string;
+}
+
+export interface MerkleTreeStructure {
+  root: string;
+  leaves: string[];
+  depth: number;
+  levels: string[][];
+  totalNodes: number;
+}
+
+export interface LedgerStatus {
+  network: string;
+  channel: string;
+  chaincode: string;
+  peer: string;
+  mode: 'SYNTHETIC_FAILSAFE' | 'HYPERLEDGER_FABRIC_LIVE';
+  blockHeight: number;
+  totalTransactions: number;
+  consensus: string;
+  connected: boolean;
+  uptimeSeconds: number;
+}
+
+export interface BatchVerificationResult {
+  verified: boolean;
+  status: 'VALID' | 'TAMPERED';
+  message: string;
+  batchId: string;
+  deliveryId: number;
+  calculatedRoot: string;
+  blockchainRoot: string;
+  blockchainTxId: string;
+  blockNumber: number;
+  recordCount: number;
+  hashChainValid: boolean;
+  tamperedRecords: any[];
+  verifiedAt: string;
+  treeStructure?: MerkleTreeStructure;
+}
